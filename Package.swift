@@ -8,6 +8,8 @@ let package = Package(
         .library(name: "Domain", targets: ["Domain"]),
         .library(name: "UI", targets: ["UI"]),
         .executable(name: "StoryCatalog", targets: ["StoryCatalog"]),
+        .executable(name: "FixtureApp", targets: ["FixtureApp"]),
+        .executable(name: "EnvironmentProbe", targets: ["EnvironmentProbe"]),
     ],
     targets: [
         .target(name: "Domain"),
@@ -15,6 +17,10 @@ let package = Package(
         .target(name: "UI"),
         .executableTarget(name: "StoryCatalog", dependencies: ["UI"]),
         .testTarget(name: "UITests", dependencies: ["UI"]),
+        .executableTarget(name: "FixtureApp"),
+        .target(name: "DisplayProbeBridge", cSettings: [.unsafeFlags(["-fobjc-arc"])], linkerSettings: [.linkedFramework("CoreGraphics"), .linkedFramework("Foundation")]),
+        .executableTarget(name: "EnvironmentProbe", dependencies: ["DisplayProbeBridge"]),
+        .testTarget(name: "EnvironmentProbeTests", dependencies: ["EnvironmentProbe"]),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -1,0 +1,61 @@
+name: Foundation
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/determinate-nix-action@9596b92e70cbf68a494a2b0273cb5b680184f5fc # v3.13.1
+      - name: Build and deterministic checks with pinned tools
+        run: nix flake check --print-build-logs
+      - name: Check product documentation and diagrams
+        run: nix run .#docs
+      - name: Record Xcode development toolchain
+        run: |
+          mkdir -p .local/ci
+          xcodebuild -version > .local/ci/xcode.txt
+          xcrun --show-sdk-version > .local/ci/sdk.txt
+          sw_vers > .local/ci/macos.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: foundation-environment
+          path: .local/ci
+          include-hidden-files: true
+          if-no-files-found: warn
+
+  environment-probes:
+    needs: deterministic
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/determinate-nix-action@9596b92e70cbf68a494a2b0273cb5b680184f5fc # v3.13.1
+      - name: Build controlled-launch artifacts with Xcode
+        run: nix run .#build -- --configuration release --sign-identity -
+      - name: Qualify real AX and virtual displays
+        run: python3 E2E/native.py --profile hosted --output .local/ci/qualification
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: environment-probe-evidence
+          path: .local/ci/qualification
+          include-hidden-files: true
+          if-no-files-found: warn

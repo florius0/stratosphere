@@ -24,9 +24,9 @@
 
 **Interfaces:** A value-based `WorkspaceTree` provides node/window ownership mutations and `resolveActivation(target:displays:main:)`; returned placement references durable node IDs, not AX objects. Concrete type names are chosen within Domain and consumed only after this task's review. References: C-01–C-04; FR-01–FR-06, FR-14.
 
-- [ ] Write tests for leaf wrapping transferring windows/layout/binding; unique sibling names including Unicode/case collisions; no double ownership; direct-descendant binding after ancestor activation; remembered/recency/order selection and display fallback collisions.
-- [ ] Run `swift test --filter DomainTests`, observe missing behavior, then implement minimal value-based rules.
-- [ ] Run the domain suite and review whether each test catches a realistic invariant violation.
+- [x] Write tests for leaf wrapping transferring windows/layout/binding; unique sibling names including Unicode/case collisions; no double ownership; direct-descendant binding after ancestor activation; remembered/recency/order selection and display fallback collisions.
+- [x] Run `swift test --filter DomainTests`, observe missing behavior, then implement minimal value-based rules.
+- [x] Run the domain suite and review whether each test catches a realistic invariant violation.
 
 ## Task 2: Native catalog
 
@@ -34,9 +34,9 @@
 
 **Interfaces:** UI uses independently constructed presentation fixtures and records requested actions without a live daemon. StoryCatalog renders those same views in a native app and panel. References: FR-41–FR-47, FR-54; design-process.md.
 
-- [ ] Write tests for story replay/action state before implementing those transitions.
-- [ ] Add busy compact/full rail, deep tree, partial-failure and interruptible expansion stories with reset/replay, searchable selection, appearance controls, and action log.
-- [ ] Build catalog; inspect native UI on the host without starting window management.
+- [x] Write tests for story replay/action state before implementing those transitions.
+- [x] Add busy compact/full rail, deep tree, partial-failure and interruptible expansion stories with reset/replay, searchable selection, appearance controls, and action log.
+- [x] Build catalog; inspect native UI on the host without starting window management.
 
 ## Task 3: Build, bundles, and Nix
 
@@ -44,10 +44,10 @@
 
 **Interfaces:** `python3 Tools/build.py build|test|stories|qualify` is the common development wrapper. `build` writes `.local/build/*.app` and a probe executable. `qualify` delegates to the isolated entrypoint, and `stories` launches only the catalog.
 
-- [ ] Prove Swift 6 and SDK 26 compilation; record selected compiler and SDK. Investigate a pinned Nix source build and retain explicit unqualified status if unavailable.
-- [ ] Assemble bundles containing Info.plist, executable, resources and optional signing; inspect metadata and Mach-O dependencies.
-- [ ] Add lockfile and Nix wrappers for development, checks, build, stories, native and VM qualification.
-- [ ] Execute actual supported entrypoints; do not report evaluation as a successful source build.
+- [x] Prove Swift 6 and SDK 26 compilation; record selected compiler and SDK. Investigate a pinned Nix source build and retain explicit unqualified status if unavailable.
+- [x] Assemble bundles containing Info.plist, executable, resources and optional signing; inspect metadata and Mach-O dependencies.
+- [x] Add lockfile and Nix wrappers for development, checks, build, stories, native and VM qualification.
+- [x] Execute actual supported entrypoints; do not report evaluation as a successful source build.
 
 ## Task 4: Isolated environment probes and orchestration
 
@@ -55,15 +55,21 @@
 
 **Interfaces:** `EnvironmentProbe --profile hosted|guest --fixture PATH --output PATH` produces structured environment/results JSON and a nonzero exit for missing requirements. `E2E/native.py` enforces the isolated profile and invokes the probe. `E2E/vm.py` accepts a configured prepared image and guest GUI account; clones, transfers, collects, and cleans up.
 
-- [ ] Write wrapper tests proving absent isolation is refused and owned guest teardown occurs on failure.
-- [ ] Add real AppKit fixture and AX/display probe; compile without mutating the host desktop.
-- [ ] Implement bounded guest lifecycle and qualification workflow; preserve result/log artifacts on failure.
-- [ ] Attempt isolated qualification when prerequisites exist; retain a concrete pending checklist for daemon/watchdog, grant survival, and hardware evidence.
+- [x] Write wrapper tests proving absent isolation is refused and owned guest teardown occurs on failure.
+- [x] Add real AppKit fixture and AX/display probe; compile without mutating the host desktop.
+- [x] Implement bounded guest lifecycle and qualification workflow; preserve result/log artifacts on failure.
+- [x] Attempt isolated qualification when prerequisites exist; retain a concrete pending checklist for daemon/watchdog, grant survival, and hardware evidence.
 
 ## Task 5: Review and evidence
 
 **Files:** `docs/implementation/foundation-verification.md`, `README.md`, this plan.
 
-- [ ] Run Swift tests, tooling tests, builds, Nix checks applicable to selected tooling, documentation link/ID checks, and Graphviz parsing.
-- [ ] Inspect artifacts and native stories; review the final changes for invariants, truthful qualification, cleanup, and preservation of product authority.
-- [ ] Record passed and unavailable checks separately; update task status to reflect actual results.
+- [x] Run Swift tests, tooling tests, builds, Nix checks applicable to selected tooling, documentation link/ID checks, and Graphviz parsing.
+- [x] Inspect artifacts and native stories; review the final changes for invariants, truthful qualification, cleanup, and preservation of product authority.
+- [x] Record passed and unavailable checks separately; update task status to reflect actual results.
+
+## Execution result
+
+Implemented and reviewed the code/build foundation. Full pinned Nix checks pass: 45 Swift Testing tests and 20 Python tooling tests. The Xcode route passes the same suites. Native catalog and packaged artifacts were inspected; exact evidence and remaining limits are in [foundation verification](foundation-verification.md).
+
+The prerequisite inspection for Task 4 found no prepared Tart image/dedicated guest key, no configured Git remote, and no persistent signing identity. No actual guest/hosted AX or display qualification was attempted. That part of the proposed first milestone remains outstanding, with preparation and acceptance steps in [environment setup](environment-setup.md). Checkmarks above record implemented tooling and executed checks; they do not establish live platform feasibility.
