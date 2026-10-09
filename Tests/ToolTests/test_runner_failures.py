@@ -166,11 +166,17 @@ class VMOrchestrationTests(unittest.TestCase):
         home = root / "images"
         home.mkdir()
         (home / "prepared").mkdir()
-        executable(tools / "tart", """import os, pathlib, shutil, signal, sys, time
+        executable(tools / "tart", """import json, os, pathlib, shutil, signal, sys, time
+with pathlib.Path(os.environ['TEST_COMMAND_LOG']).open('a') as log:
+    log.write(json.dumps({'tool': 'tart', 'arguments': sys.argv[1:]}) + '\\n')
 home = pathlib.Path(os.environ['TART_HOME'])
 action, *args = sys.argv[1:]
 if action == 'clone':
     (home / args[1]).mkdir()
+elif action == 'set':
+    if os.environ.get('TEST_GUEST_FAILURE') == 'refit':
+        sys.exit(9)
+    (home / args[0] / 'refit-disabled').touch()
 elif action == 'run':
     (home / args[-1] / 'pid').write_text(str(os.getpid()))
     time.sleep(30)

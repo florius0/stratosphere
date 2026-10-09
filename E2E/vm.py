@@ -42,6 +42,7 @@ class Guest:
         return self
 
     def boot(self):
+        self.command("set", self.name, "--no-display-refit")
         self.process = subprocess.Popen([self.tart, "run", "--no-graphics", self.name],
                                         env=self.environment, stdout=self.log, stderr=subprocess.STDOUT)
 

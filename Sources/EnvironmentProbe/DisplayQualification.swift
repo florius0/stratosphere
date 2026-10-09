@@ -1,7 +1,7 @@
 import AppKit
 import DisplayProbeBridge
 
-struct DisplayObservation: Equatable {
+struct DisplayObservation: Equatable, Codable {
     var id: CGDirectDisplayID
     var uuid: String
     var bounds: CGRect
@@ -20,26 +20,21 @@ struct DisplayObservation: Equatable {
     }
 }
 @MainActor final class DisplayQualification {
+    private let profile: Profile
     private(set) var baseline: [DisplayObservation]
     private var owned: [STVirtualDisplay] = []
     private(set) var evidence: [[String: Any]] = []
-    init() throws {
-        baseline = try Self.observe(kind: .setup)
+    init(profile: Profile) throws {
+        self.profile = profile
+        baseline = try DisplayReadout.read(profile: profile, kind: .setup)
         guard !baseline.isEmpty, baseline.contains(where: \.main), baseline.allSatisfy({ !$0.mirrored }) else {
             throw ProbeFailure("Probe requires an existing nonmirrored base desktop.")
         }
     }
-    static func observe(kind: FailureKind = .assertion) throws -> [DisplayObservation] {
-        var count: UInt32 = 0
-        guard CGGetOnlineDisplayList(0, nil, &count) == .success else { throw ProbeFailure("Cannot read display topology", kind: kind) }
-        var identifiers = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        guard CGGetOnlineDisplayList(count, &identifiers, &count) == .success else { throw ProbeFailure("Cannot read display topology", kind: kind) }
-        return try identifiers.prefix(Int(count)).sorted().map { id in
-            guard let mode = CGDisplayCopyDisplayMode(id), let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(), let text = CFUUIDCreateString(nil, uuid) else { throw ProbeFailure("Display mode/UUID unavailable for \(id)", kind: kind) }
-            return DisplayObservation(id: id, uuid: text as String, bounds: CGDisplayBounds(id), pixels: CGSize(width: mode.pixelWidth, height: mode.pixelHeight), logical: CGSize(width: mode.width, height: mode.height), refresh: mode.refreshRate,
-                                      mirrored: CGDisplayIsInMirrorSet(id) != 0, main: CGDisplayIsMain(id) != 0,
-                                      vendor: CGDisplayVendorNumber(id), product: CGDisplayModelNumber(id), serial: CGDisplaySerialNumber(id))
-        }
+    private func observe(kind: FailureKind = .assertion) throws -> [DisplayObservation] {
+        // The creating process cannot read modes after its baseline query on
+        // observed macOS 26.5. A fresh process observes actual native modes.
+        try DisplayReadout.read(profile: profile, kind: kind)
     }
     private func create(width: UInt32, height: UInt32, hiDPI: Bool, serial: UInt32) throws -> STVirtualDisplay {
         let display: STVirtualDisplay
@@ -47,7 +42,7 @@ struct DisplayObservation: Equatable {
         catch { throw ProbeFailure("Virtual-display capability unavailable: \(error)", kind: .setup) }
         owned.append(display)
         try SystemObservation.wait("virtual display \(display.displayID) to become active") {
-            try Self.observe(kind: .setup).contains(where: { $0.id == display.displayID && CGDisplayIsActive($0.id) != 0 })
+            try DisplayReadout.identifiers(kind: .setup).contains(display.displayID) && CGDisplayIsActive(display.displayID) != 0
         }
         return display
     }
@@ -63,7 +58,7 @@ struct DisplayObservation: Equatable {
         guard CGCompleteDisplayConfiguration(configuration, .forSession) == .success else { throw ProbeFailure("Display configuration rejected", kind: .assertion) }
         completed = true
         try SystemObservation.wait("observed display arrangement", kind: .assertion) {
-            let topology = try Self.observe()
+            let topology = try self.observe()
             return origins.allSatisfy { id, point in topology.contains { $0.id == id && $0.bounds.origin == point && !$0.mirrored } }
         }
     }
@@ -71,7 +66,7 @@ struct DisplayObservation: Equatable {
         evidence.append(["phase": "baseline", "displays": baseline.map(\.json)])
         let a = try create(width: 1440, height: 900, hiDPI: false, serial: 791101)
         let b = try create(width: 2560, height: 1600, hiDPI: true, serial: 791102)
-        let initial = try Self.observe()
+        let initial = try self.observe()
         guard initial.count == baseline.count + 2, baseline.allSatisfy({ original in initial.contains(where: { $0.id == original.id }) }),
               let oa = initial.first(where: { $0.id == a.displayID }), let ob = initial.first(where: { $0.id == b.displayID }),
               oa.logical == CGSize(width: 1440, height: 900), oa.pixels == oa.logical,
@@ -82,37 +77,37 @@ struct DisplayObservation: Equatable {
         origins[a.displayID] = CGPoint(x: (baseline.map { $0.bounds.minX }.min() ?? 0) - oa.bounds.width, y: 0)
         origins[b.displayID] = CGPoint(x: 0, y: (baseline.map { $0.bounds.minY }.min() ?? 0) - ob.bounds.height)
         try configure(origins)
-        evidence.append(["phase": "left-and-above", "displays": try Self.observe().map(\.json)])
+        evidence.append(["phase": "left-and-above", "displays": try self.observe().map(\.json)])
         try placeWindows(a.displayID, b.displayID)
         let shift = CGPoint(x: -origins[a.displayID]!.x, y: 0)
         try configure(origins.mapValues { CGPoint(x: $0.x + shift.x, y: $0.y + shift.y) })
         guard CGMainDisplayID() == a.displayID else { throw ProbeFailure("Native main-display change was not observed", kind: .assertion) }
-        evidence.append(["phase": "main-changed", "displays": try Self.observe().map(\.json)])
+        evidence.append(["phase": "main-changed", "displays": try self.observe().map(\.json)])
         // Restore base as main before releasing the other display.
         try configure(origins)
         let previousID = b.displayID, previousUUID = ob.uuid
         b.release()
-        try SystemObservation.wait("virtual display removal", kind: .assertion) { try !Self.observe().contains(where: { $0.id == previousID }) }
-        evidence.append(["phase": "removed", "displays": try Self.observe().map(\.json)])
+        try SystemObservation.wait("virtual display removal", kind: .assertion) { try !DisplayReadout.identifiers(kind: .assertion).contains(previousID) }
+        evidence.append(["phase": "removed", "displays": try self.observe().map(\.json)])
         let readded = try create(width: 2560, height: 1600, hiDPI: true, serial: 791102)
-        let reconnect = try Self.observe().first(where: { $0.id == readded.displayID })
+        let reconnect = try self.observe().first(where: { $0.id == readded.displayID })
         guard reconnect?.uuid == previousUUID, reconnect?.serial == ob.serial, reconnect?.vendor == ob.vendor, reconnect?.product == ob.product else {
             throw ProbeFailure("Virtual display reconnect did not preserve observed durable identity", kind: .assertion)
         }
         origins.removeValue(forKey: previousID)
         origins[readded.displayID] = CGPoint(x: 0, y: (baseline.map { $0.bounds.minY }.min() ?? 0) - ob.bounds.height)
         try configure(origins)
-        evidence.append(["phase": "reconnected", "displays": try Self.observe().map(\.json)])
+        evidence.append(["phase": "reconnected", "displays": try self.observe().map(\.json)])
         try placeWindows(a.displayID, readded.displayID)
     }
     func cleanup() throws {
         for display in owned { display.release() }
         owned.removeAll()
         try SystemObservation.wait("owned displays to disappear", kind: .cleanup) {
-            Set(try Self.observe(kind: .cleanup).map(\.id)) == Set(baseline.map(\.id))
+            Set(try DisplayReadout.identifiers(kind: .cleanup)) == Set(baseline.map(\.id))
         }
         try configure(Dictionary(uniqueKeysWithValues: baseline.map { ($0.id, $0.bounds.origin) }))
-        let final = try Self.observe(kind: .cleanup)
+        let final = try self.observe(kind: .cleanup)
         guard final == baseline else { throw ProbeFailure("Display cleanup did not restore baseline modes, origins, identity, and main display", kind: .cleanup) }
         evidence.append(["phase": "restored", "displays": final.map(\.json)])
     }

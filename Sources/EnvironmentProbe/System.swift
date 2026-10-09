@@ -10,7 +10,7 @@ import Darwin
         guard sysctlbyname(name, &bytes, &size, nil, 0) == 0 else { throw ProbeFailure("Cannot read \(name)") }
         return String(decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
-    static func command(_ executable: String, _ arguments: [String]) throws -> (Int32, String) {
+    static func command(_ executable: String, _ arguments: [String], timeout: Double = 10) throws -> (Int32, String) {
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("stratosphere-metadata-\(UUID().uuidString).txt")
         let descriptor = open(output.path, O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, mode_t(0o600))
         guard descriptor >= 0 else { throw ProbeFailure("Cannot create metadata output") }
@@ -18,7 +18,7 @@ import Darwin
         let child = OwnedProcess()
         do {
             try child.launch(executable: URL(fileURLWithPath: executable), arguments: arguments, outputDescriptor: descriptor)
-            guard try child.waitForExit(seconds: 10) else {
+            guard try child.waitForExit(seconds: timeout) else {
                 try child.stop()
                 throw ProbeFailure("Metadata command timed out: \(executable)")
             }
