@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 from bundle import assemble
+from signing import keychain_scope, sign_artifact
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / ".local" / "build"
@@ -34,10 +35,16 @@ def toolchain():
     sdk_version = json.loads((Path(sdk) / "SDKSettings.json").read_text())["Version"]
     if int(sdk_version.split(".")[0]) < 26:
         raise RuntimeError("A macOS 26+ SDK is required")
+    try:
+        developer = capture(["/usr/bin/xcode-select", "-p"], stderr=subprocess.DEVNULL)
+        xcodebuild = Path(developer) / "usr/bin/xcodebuild"
+        xcode_version = capture([str(xcodebuild), "-version"], stderr=subprocess.DEVNULL) if xcodebuild.is_file() else "unavailable"
+    except (OSError, subprocess.CalledProcessError):
+        xcode_version = "unavailable"
     revision = capture(["git", "-C", str(ROOT), "rev-parse", "HEAD"])
     dirty = bool(capture(["git", "-C", str(ROOT), "status", "--porcelain"]))
     return swift, sdk, {"compiler": version, "sdk": sdk_version, "sdkPath": sdk, "macOS": os_version,
-                        "sourceRevision": revision + ("-dirty" if dirty else "")}
+                        "sourceRevision": revision + ("-dirty" if dirty else ""), "xcode": xcode_version}
 
 
 def swift_command(swift, verb, configuration):
@@ -52,12 +59,15 @@ def main():
     parser.add_argument("action", choices=["build", "test", "stories", "qualify"])
     parser.add_argument("--configuration", choices=["debug", "release"], default="debug")
     parser.add_argument("--sign-identity", default=os.environ.get("STRATOSPHERE_SIGN_IDENTITY"))
+    parser.add_argument("--sign-keychain", type=Path, default=os.environ.get("STRATOSPHERE_SIGN_KEYCHAIN") or None, help="Existing signing keychain; temporarily included during artifact signing")
     options, remaining = parser.parse_known_args()
     if options.action == "qualify":
         subprocess.run([sys.executable, str(ROOT / "E2E/native.py"), *remaining], check=True)
         return
     if remaining:
         parser.error("Unexpected arguments: " + " ".join(remaining))
+    if options.sign_keychain and not options.sign_identity:
+        parser.error("--sign-keychain requires --sign-identity")
     swift, sdk, metadata = toolchain()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
@@ -76,13 +86,13 @@ def main():
         subprocess.run([sys.executable, str(ROOT / "Tools/check-docs.py")], check=True)
         return
     binaries = Path(capture([*swift_command(swift, "build", options.configuration), "--show-bin-path"], env=environment))
-    for name, identifier in [("StoryCatalog", "dev.stratosphere.catalog"), ("FixtureApp", "dev.stratosphere.fixture")]:
-        assemble(binaries / name, OUTPUT / (name + ".app"), identifier, name, identity=options.sign_identity)
-    import shutil
-    shutil.copy2(binaries / "EnvironmentProbe", OUTPUT / "EnvironmentProbe")
-    if options.sign_identity:
-        subprocess.run(["/usr/bin/codesign", "--force", "--options", "runtime", "--identifier", "dev.stratosphere.environment-probe",
-                        "--sign", options.sign_identity, str(OUTPUT / "EnvironmentProbe")], check=True)
+    with keychain_scope(options.sign_keychain if options.sign_identity else None) as selected_keychain:
+        for name, identifier in [("StoryCatalog", "dev.stratosphere.catalog"), ("FixtureApp", "dev.stratosphere.fixture")]:
+            assemble(binaries / name, OUTPUT / (name + ".app"), identifier, name, identity=options.sign_identity, keychain=selected_keychain)
+        import shutil
+        shutil.copy2(binaries / "EnvironmentProbe", OUTPUT / "EnvironmentProbe")
+        if options.sign_identity:
+            sign_artifact(OUTPUT / "EnvironmentProbe", options.sign_identity, selected_keychain, "dev.stratosphere.environment-probe")
     print("Artifacts: " + str(OUTPUT))
     if options.action == "stories":
         subprocess.run(["/usr/bin/open", str(OUTPUT / "StoryCatalog.app")], check=True)

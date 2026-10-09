@@ -27,6 +27,37 @@ def isolation_errors(profile, environment, hardware_model):
     return []
 
 
+def build_metadata_environment(artifacts):
+    """Forward artifact build provenance, without host paths or arbitrary fields."""
+    fields = ("compiler", "sdk", "macOS", "sourceRevision", "xcode")
+    path = Path(artifacts) / "toolchain.json"
+    metadata = {}
+    try:
+        if path.exists():
+            if path.stat().st_size > 32768:
+                raise ValueError("Oversized build metadata")
+            value = json.loads(path.read_text())
+            if not isinstance(value, dict):
+                raise ValueError("Build metadata must be an object")
+            for field in fields:
+                if field not in value:
+                    continue
+                text = value[field]
+                if not isinstance(text, str) or not text.strip() or len(text.encode()) > 4096 or any(ord(character) < 32 and character not in "\n\t" for character in text):
+                    raise ValueError("Invalid build metadata field")
+                metadata[field] = text
+    except (OSError, ValueError, UnicodeError):
+        metadata = {"compiler": None}
+    payload = json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if len(payload.encode("utf-8")) > 32768:
+        metadata = {"compiler": None}
+        payload = json.dumps(metadata, ensure_ascii=False)
+    result = {"STRATOSPHERE_BUILD_METADATA": payload}
+    if isinstance(metadata.get("sourceRevision"), str):
+        result["STRATOSPHERE_SOURCE_REVISION"] = metadata["sourceRevision"]
+    return result
+
+
 def stop_group(process):
     try:
         os.killpg(process.pid, signal.SIGTERM)
@@ -76,13 +107,8 @@ def main():
             raise RuntimeError("\n".join(errors))
         command = [str(probe), "--profile", options.profile, "--fixture", str(fixture), "--output", str(result_file.resolve())]
         environment = os.environ.copy()
-        metadata_file = options.artifacts.resolve() / "toolchain.json"
-        if metadata_file.is_file():
-            metadata = json.loads(metadata_file.read_text())
-            if not isinstance(metadata, dict):
-                raise ValueError("Toolchain metadata must be a JSON object")
-            if metadata.get("sourceRevision"):
-                environment["STRATOSPHERE_SOURCE_REVISION"] = metadata["sourceRevision"]
+        environment.pop("STRATOSPHERE_SOURCE_REVISION", None)
+        environment.update(build_metadata_environment(options.artifacts.resolve()))
         with (options.output / "probe.log").open("w") as log:
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
             try:

@@ -187,7 +187,9 @@ elif action == 'delete':
         sys.exit(9)
     shutil.rmtree(home / args[0])
 """)
-        executable(tools / "ssh", """import json, shlex, sys
+        executable(tools / "ssh", """import json, os, pathlib, shlex, sys
+with pathlib.Path(os.environ['TEST_COMMAND_LOG']).open('a') as log:
+    log.write(json.dumps({'tool': 'ssh', 'arguments': sys.argv[1:]}) + '\\n')
 command = shlex.split(sys.argv[-1])
 if command == ['id', '-u']:
     print('502')
@@ -196,7 +198,10 @@ elif command[0] == 'cat' and command[1].endswith('qualification.json'):
 elif command[0] == 'cat':
     print('current guest log')
 """)
-        executable(tools / "scp", "pass\n")
+        executable(tools / "scp", """import json, os, pathlib, sys
+with pathlib.Path(os.environ['TEST_COMMAND_LOG']).open('a') as log:
+    log.write(json.dumps({'tool': 'scp', 'arguments': sys.argv[1:]}) + '\\n')
+""")
         key = root / "ssh-key"
         key.touch()
         output = root / "results"
@@ -211,7 +216,8 @@ elif command[0] == 'cat':
                 raise subprocess.TimeoutExpired(command, keywords["timeout"])
             return run(command, **keywords)
 
-        environment = {"PATH": str(tools) + os.pathsep + os.environ["PATH"], "TEST_GUEST_FAILURE": failure}
+        environment = {"PATH": str(tools) + os.pathsep + os.environ["PATH"], "TEST_GUEST_FAILURE": failure,
+                       "TEST_COMMAND_LOG": str(root / "commands.jsonl")}
         with patch.object(sys, "argv", arguments), patch.dict(os.environ, environment), \
                 patch.object(vm.subprocess, "run", side_effect=controlled_run), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -258,6 +264,8 @@ elif command[0] == 'cat':
             self.assertEqual(summary["status"], "passed")
             self.assertEqual([path.name for path in home.iterdir()], ["prepared"])
             job = plistlib.loads((output / "probe.plist").read_bytes())
+            metadata = job["EnvironmentVariables"].pop("STRATOSPHERE_BUILD_METADATA")
+            self.assertEqual(json.loads(metadata), {"sourceRevision": "test-revision"})
             self.assertEqual(job["EnvironmentVariables"], {
                 "STRATOSPHERE_GUEST": "1", "STRATOSPHERE_SOURCE_REVISION": "test-revision",
                 "STRATOSPHERE_IMAGE_IDENTITY": "prepared",

@@ -22,6 +22,8 @@ In the test VM, create a dedicated test VM user with automatic GUI login and ena
 
 Choose a persistent development-only signing identity and stable test VM installation path. The build wrapper accepts `--sign-identity` or `STRATOSPHERE_SIGN_IDENTITY`; it never creates/imports a certificate or changes keychains implicitly. An ad-hoc signed or unsigned build is suitable for build inspection, but does not prove permission-grant survival.
 
+When an existing test identity is in a separate keychain, select it with `--sign-keychain` or `STRATOSPHERE_SIGN_KEYCHAIN`. The wrapper temporarily includes that keychain in the host user's search list only during signing, and restores the original list afterward, including on failure. It does not unlock keychains or create trust settings. Test signing keys stay on the host and are not copied into the test VM.
+
 ```sh
 python3 Tools/build.py build --configuration release \
   --sign-identity 'Your persistent development identity'
@@ -30,6 +32,15 @@ python3 Tools/build.py build --configuration release \
 Grant Accessibility through System Settings to the process that actually performs AX work, using the installed probe from this signed build. Confirm the launched probe's capability rather than assuming Terminal/SSH grants apply. Preserve its signature during transfer. Keep a second clean image without product grants for future permission/onboarding scenarios.
 
 The VM wrapper launches the probe through `launchctl bootstrap gui/<test-vm-user-uid>` only after verifying that GUI domain exists. SSH supplies transfer/orchestration, not evidence of desktop readiness. The probe checks the live session and permissions again. Its fixture stays in the probe's owned process tree. Missing GUI readiness, AX permission, SIP-enabled core, or private virtual-display capability fails setup.
+
+Install and grant access at the stable paths used by the wrapper:
+
+- `/Users/<test VM user>/.local/stratosphere-test-tools/EnvironmentProbe`
+- `/Users/<test VM user>/.local/stratosphere-test-tools/FixtureApp.app`
+
+Each disposable clone uses those same tool paths. Results, logs and the GUI launch job remain in separate per-run directories. The wrapper replaces only its own fixture bundle inside the clone before copying a changed build, preserving the signed host source and avoiding stale bundle resources.
+
+The initial test VM needs no Xcode, SDK or Nix installation when running these self-contained artifacts. The wrappers forward bounded build metadata from the host's `toolchain.json`; the probe records it separately from the test VM's observed OS/build and never invokes developer tools there. Missing or malformed build metadata is marked unavailable or invalid, rather than pretending the test VM has the host's toolchain. Later Xcode-managed UI tests may use a separate image profile.
 
 ## Run and evidence
 

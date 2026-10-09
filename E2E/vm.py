@@ -14,6 +14,8 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from native import build_metadata_environment
 
 
 class Guest:
@@ -146,21 +148,20 @@ def main():
                 raise RuntimeError("Guest UID could not be established")
             ssh("launchctl", "print", "gui/" + uid)
             remote = "/Users/" + options.user + "/.local/stratosphere-e2e/" + run_id
-            ssh("mkdir", "-p", remote)
+            remote_tools = "/Users/" + options.user + "/.local/stratosphere-test-tools"
+            ssh("mkdir", "-p", remote_tools, remote)
+            # Replace the owned fixture bundle so changed builds leave no stale signed resources.
+            ssh("rm", "-rf", remote_tools + "/FixtureApp.app")
             subprocess.run(["scp", *connection, "-r", str(artifacts / "FixtureApp.app"), str(artifacts / "EnvironmentProbe"),
-                            destination + ":" + remote + "/"], check=True, timeout=60)
+                            destination + ":" + remote_tools + "/"], check=True, timeout=60)
             label = "dev.stratosphere.qualification." + run_id
             job = {
                 "Label": label, "RunAtLoad": True,
-                "ProgramArguments": [remote + "/EnvironmentProbe", "--profile", "guest", "--fixture", remote + "/FixtureApp.app", "--output", remote + "/qualification.json"],
+                "ProgramArguments": [remote_tools + "/EnvironmentProbe", "--profile", "guest", "--fixture", remote_tools + "/FixtureApp.app", "--output", remote + "/qualification.json"],
                 "EnvironmentVariables": {"STRATOSPHERE_GUEST": "1"},
                 "StandardOutPath": remote + "/probe.log", "StandardErrorPath": remote + "/probe.log",
             }
-            metadata_file = artifacts / "toolchain.json"
-            if metadata_file.is_file():
-                metadata = json.loads(metadata_file.read_text())
-                if metadata.get("sourceRevision"):
-                    job["EnvironmentVariables"]["STRATOSPHERE_SOURCE_REVISION"] = metadata["sourceRevision"]
+            job["EnvironmentVariables"].update(build_metadata_environment(artifacts))
             job["EnvironmentVariables"]["STRATOSPHERE_IMAGE_IDENTITY"] = options.image
             job_file = output / "probe.plist"
             job_file.write_bytes(plistlib.dumps(job))

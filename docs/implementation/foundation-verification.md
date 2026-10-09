@@ -24,8 +24,20 @@ The pinned nixpkgs SwiftPM initially lacked the Darwin Swift Testing launcher. `
 
 ## Not yet qualified
 
-No prepared Tart image or dedicated test VM key exists in the configured environment, and no Git remote is configured for hosted execution. Local storage initially had approximately 43 GiB free. The user was asked for a prepared image/external image location; no VM image is downloaded implicitly.
+Initial setup had no test VM image, SSH key or signing identity. After the host user freed storage and approved a dedicated test identity, the following preparation was executed on 2026-10-09:
 
-Actual test VM/hosted AX, virtual-display topology/identity, permissions and cleanup remain unqualified. A compiled private adapter is not proof of feasibility. The foundation has no daemon/watchdog implementation and cannot establish app-stall/crash recovery. Persistent signing/grant survival, installed startup, real integrations, hardware behavior and the optional idle controller remain separate work.
+- Downloaded the official macOS 26.5 vanilla image pinned to `sha256:e12d678b248f3122e276fa64632970a8e1c6dc60ff6738d21fe9bfa5ea58f426` into `.local/tart`. Its reported disk capacity is 50 GB, with about 27 GB in the base image; APFS clones share unchanged data.
+- Booted a prepared clone with four CPUs, 4096 MiB RAM, a fixed 1280×800 display and display refitting disabled. Actual observations: macOS 26.5, build 25F71, VirtualMac2,1, arm64, SIP enabled and active GUI login UID 501.
+- Verified dedicated-key SSH access for test VM user `admin`; only the public SSH key was installed in the test VM. The host user's home and signing keys were not mounted or copied.
+- Re-enabled Gatekeeper in the prepared test VM; the vendor image initially reported assessments disabled. The host's Gatekeeper settings were not changed.
+- Created the approved local test signing identity in `.local/signing/test.keychain-db`, with host-user trust limited to code signing. Signed all three artifacts and verified their signatures. The host user's original keychain search list was restored. This is development signing, not Developer ID/notarized distribution.
+- The Nix-managed Tart bundle could not be materialized because of a store permissions error. For this preparation, the official Tart 2.37.0 archive was extracted under `.local/tools`; its SHA-256 exactly matched the pinned nixpkgs input. The same signed app bundle executable was used, without modifying host Nix permissions.
+- A separate runtime inspection found no Xcode or Command Line Tools installation. The actual probe ran through the test VM user's GUI launch domain, observed an active console session and AX access denied, then returned `setup-failed` with no fixture/display observations. Accessibility approval is the current prerequisite; no private-display feasibility or grant-survival claim is made from this check.
+
+The follow-up code removes developer-tool queries from the runtime probe, forwards bounded host build metadata, installs tools at stable paths across runs, and supports a separate signing keychain during builds. The metadata/stable-path reviews passed; 48 Swift tests and 34 Python tooling tests pass on the host after these changes. Local preparation, signing and permission-check evidence lives under `.local/vm-preparation` and `.local/signing` and is excluded from Git.
+
+No Git remote is configured; the user will push manually. Hosted qualification has not run.
+
+Actual test VM/hosted AX mutation, virtual-display topology/identity, permission-grant survival and desktop cleanup remain unqualified. A compiled private adapter is not proof of feasibility. The foundation has no daemon/watchdog implementation and cannot establish app-stall/crash recovery. Installed startup, real integrations, hardware behavior and the optional idle controller remain separate work.
 
 The setup preserves all product-document edits that existed before implementation. They remain outside foundation commits; repository hosting must include that documentation separately before CI can check it.

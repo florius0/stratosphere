@@ -22,6 +22,8 @@ import Darwin
             guard let options else { print(Options.usage); return }
             report["profile"] = options.profile.rawValue
             let environment = ProcessInfo.processInfo.environment
+            let buildMetadata = BuildMetadata.read(environment["STRATOSPHERE_BUILD_METADATA"])
+            report["build_toolchain"] = buildMetadata.json
             let model = try SystemObservation.sysctl("hw.model")
             report["hardware_model"] = model
             // This check precedes all AppKit launch, AX mutation and display work.
@@ -29,7 +31,7 @@ import Darwin
             let os = ProcessInfo.processInfo.operatingSystemVersion
             let architecture = try SystemObservation.sysctl("hw.machine")
             report["environment"] = ["macos": "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)", "build": try SystemObservation.sysctl("kern.osversion"), "architecture": architecture,
-                                     "source_revision": environment["STRATOSPHERE_SOURCE_REVISION"] ?? "unavailable", "image_identity": environment["STRATOSPHERE_IMAGE_IDENTITY"] ?? "unavailable",
+                                     "source_revision": buildMetadata.values["sourceRevision"] ?? "unavailable", "image_identity": environment["STRATOSPHERE_IMAGE_IDENTITY"] ?? "unavailable",
                                      "runner_name": environment["RUNNER_NAME"] ?? "unavailable", "runner_image_version": environment["ImageVersion"] ?? "unavailable"]
             guard os.majorVersion >= 26, architecture == "arm64" else { throw ProbeFailure("Qualification requires macOS 26+ on native arm64") }
             let sip = try SystemObservation.command("/usr/bin/csrutil", ["status"])
@@ -38,8 +40,6 @@ import Darwin
             report["gui_session"] = try SystemObservation.validateSession()
             report["capabilities"] = ["probe_ax_trusted": AXIsProcessTrusted(), "screen_capture_granted": CGPreflightScreenCaptureAccess()]
             guard AXIsProcessTrusted() else { throw ProbeFailure("AX permission is absent in EnvironmentProbe; prepare the isolated launch profile") }
-            report["xcode"] = try SystemObservation.command("/usr/bin/xcrun", ["xcodebuild", "-version"]).1
-            report["sdk"] = try SystemObservation.command("/usr/bin/xcrun", ["--show-sdk-version"]).1
             report["probe_signature"] = try SystemObservation.command("/usr/bin/codesign", ["-dv", "--verbose=4", CommandLine.arguments[0]]).1
             report["fixture_signature"] = try SystemObservation.command("/usr/bin/codesign", ["-dv", "--verbose=4", options.fixture.path]).1
             report["fixture_version"] = (NSDictionary(contentsOf: options.fixture.appendingPathComponent("Contents/Info.plist"))?["CFBundleShortVersionString"] as? String) ?? "unavailable"

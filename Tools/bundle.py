@@ -5,12 +5,16 @@ import argparse
 import os
 import plistlib
 import shutil
-import subprocess
 import tempfile
 import uuid
 
+try:
+    from Tools.signing import sign_artifact
+except ModuleNotFoundError:
+    from signing import sign_artifact
 
-def assemble(executable, output, identifier, name, resources=None, identity=None):
+
+def assemble(executable, output, identifier, name, resources=None, identity=None, keychain=None):
     executable, output = Path(executable), Path(output)
     if not executable.is_file():
         raise FileNotFoundError(executable)
@@ -46,9 +50,7 @@ def assemble(executable, output, identifier, name, resources=None, identity=None
         else:
             shutil.copytree(resources, destination)
         if identity:
-            subprocess.run([
-                "/usr/bin/codesign", "--force", "--options", "runtime", "--sign", identity, str(app)
-            ], check=True)
+            sign_artifact(app, identity, keychain)
         backup = output.parent / (".previous-" + uuid.uuid4().hex)
         replaced = output.exists()
         if replaced:
@@ -72,8 +74,11 @@ def main():
     parser.add_argument("--name", required=True)
     parser.add_argument("--resources", type=Path)
     parser.add_argument("--identity", help="Persistent development or Developer ID identity; '-' is ad hoc")
+    parser.add_argument("--keychain", type=Path, default=os.environ.get("STRATOSPHERE_SIGN_KEYCHAIN") or None, help="Existing signing keychain; temporarily included only during signing")
     options = parser.parse_args()
-    assemble(options.executable, options.output, options.identifier, options.name, options.resources, options.identity)
+    if options.keychain and not options.identity:
+        parser.error("--keychain requires --identity")
+    assemble(options.executable, options.output, options.identifier, options.name, options.resources, options.identity, options.keychain)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ python3 Tools/build.py stories
 
 The development shell selects the pinned Swift compiler/SDK. Outside that shell, these Python commands select the active Xcode toolchain and verify Swift 6+/SDK 26+. Both routes use the same package and bundle assembler. Outputs and caches stay in `.local/`.
 
+For an existing identity in a separate keychain, use `--sign-identity NAME --sign-keychain /absolute/path/to/keychain` with `build`. The host user's original keychain search list is restored after signing. Identity creation, keychain unlocking and trust approval are separate setup actions.
+
 ```sh
 nix flake check
 nix run .#docs
@@ -47,6 +49,8 @@ nix run .#e2e-vm -- --image stratosphere-prepared \
 This requires a prepared, stopped local Tart image with automatic GUI login, dedicated SSH access, and qualified AX permissions. See [environment preparation](docs/implementation/environment-setup.md). The wrapper never downloads an image implicitly, clones before running, executes in the test VM's GUI launch domain, collects results, and discards only its own clone.
 
 Build `.local/build` with your persistent signing identity for this prepared test VM route. Without `--artifacts`, the Nix entrypoints use the unsigned store build, which needs its own qualified controlled-launch permissions; it cannot establish persistent development-grant survival.
+
+The initial test VM runs the host-built artifacts without Xcode, an SDK or Nix. Host build metadata is forwarded separately from the test VM's observed runtime OS. Tools use stable installation paths across clones; each run's evidence stays separate.
 
 The native entrypoint also runs directly on GitHub-hosted macOS runners:
 
