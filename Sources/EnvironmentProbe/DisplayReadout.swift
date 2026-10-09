@@ -61,11 +61,7 @@ enum DisplayReadout {
     @MainActor static func run(_ arguments: [String]) -> Int32 {
         do {
             let profile = try profile(arguments)
-            try Isolation.validate(profile: profile, environment: ProcessInfo.processInfo.environment, model: SystemObservation.sysctl("hw.model"))
-            guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26, try SystemObservation.sysctl("hw.machine") == "arm64" else {
-                throw ProbeFailure("Display observation requires macOS 26+ on arm64")
-            }
-            _ = try SystemObservation.validateSession()
+            try validateContext(profile: profile)
             let data: Data
             if arguments[0] == "--observe-display-ids" {
                 data = try JSONEncoder().encode(DisplayIDSnapshot(version: 1, ids: try rawIdentifiers(kind: .setup)))
@@ -78,6 +74,11 @@ enum DisplayReadout {
             return 0
         } catch { fputs("\(error)\n", stderr); return 1 }
     }
+    @MainActor static func validateContext(profile: Profile) throws {
+        try Isolation.validate(profile: profile, environment: ProcessInfo.processInfo.environment, model: SystemObservation.sysctl("hw.model"))
+        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26, try SystemObservation.sysctl("hw.machine") == "arm64" else { throw ProbeFailure("Display helper requires macOS 26+ on arm64") }
+        _ = try SystemObservation.validateSession()
+    }
     @MainActor static func rawIdentifiers(kind: FailureKind) throws -> [CGDirectDisplayID] {
         var count: UInt32 = 0
         guard CGGetOnlineDisplayList(0, nil, &count) == .success else { throw ProbeFailure("Cannot read display topology", kind: kind) }
@@ -89,7 +90,7 @@ enum DisplayReadout {
         try rawIdentifiers(kind: .setup).map { id in
             guard let mode = CGDisplayCopyDisplayMode(id) else { throw ProbeFailure("Display mode unavailable for \(id)") }
             guard let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(), let text = CFUUIDCreateString(nil, uuid) else { throw ProbeFailure("Display UUID unavailable for \(id)") }
-            return DisplayObservation(id: id, uuid: text as String, bounds: CGDisplayBounds(id), pixels: CGSize(width: mode.pixelWidth, height: mode.pixelHeight), logical: CGSize(width: mode.width, height: mode.height), refresh: mode.refreshRate, mirrored: CGDisplayIsInMirrorSet(id) != 0, main: CGDisplayIsMain(id) != 0, vendor: CGDisplayVendorNumber(id), product: CGDisplayModelNumber(id), serial: CGDisplaySerialNumber(id))
+            return DisplayObservation(id: id, uuid: text as String, bounds: CGDisplayBounds(id), pixels: CGSize(width: mode.pixelWidth, height: mode.pixelHeight), logical: CGSize(width: mode.width, height: mode.height), refresh: mode.refreshRate, active: CGDisplayIsActive(id) != 0, mirrored: CGDisplayIsInMirrorSet(id) != 0, main: CGDisplayIsMain(id) != 0, vendor: CGDisplayVendorNumber(id), product: CGDisplayModelNumber(id), serial: CGDisplaySerialNumber(id))
         }
     }
 }

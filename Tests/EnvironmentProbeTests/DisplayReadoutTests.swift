@@ -5,7 +5,7 @@ import Testing
 
 struct DisplayReadoutTests {
     private var observation: DisplayObservation {
-        DisplayObservation(id: 9, uuid: "00000000-0000-0000-0000-000000000009", bounds: CGRect(x: -1440, y: 0, width: 1440, height: 900), pixels: CGSize(width: 1440, height: 900), logical: CGSize(width: 1440, height: 900), refresh: 60, mirrored: false, main: true, vendor: 505, product: 1, serial: 791101)
+        DisplayObservation(id: 9, uuid: "00000000-0000-0000-0000-000000000009", bounds: CGRect(x: -1440, y: 0, width: 1440, height: 900), pixels: CGSize(width: 1440, height: 900), logical: CGSize(width: 1440, height: 900), refresh: 60, active: true, mirrored: false, main: true, vendor: 505, product: 1, serial: 791101)
     }
     @Test func preservesSuppliedStructuredGeometry() throws {
         let data = try JSONEncoder().encode(DisplaySnapshot(version: 1, displays: [observation]))

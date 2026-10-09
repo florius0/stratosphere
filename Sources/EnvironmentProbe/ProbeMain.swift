@@ -5,6 +5,7 @@ import Darwin
 @main struct ProbeMain {
     @MainActor static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.first == "--configure-displays" { exit(DisplayConfigurationHelper.run(arguments)) }
         if let first = arguments.first, ["--observe-displays", "--observe-display-ids"].contains(first) { exit(DisplayReadout.run(arguments)) }
         var report: [String: Any] = ["schema_version": 1, "status": "setup-failed", "kind": "partial-environment-qualification",
                                      "unqualified": ["daemon-and-watchdog-recovery", "AX-stall-recovery", "installed-product-and-grant-survival", "input-injection-and-screen-capture", "real-app-integrations", "physical-hardware", "unattended-host-controller"]]

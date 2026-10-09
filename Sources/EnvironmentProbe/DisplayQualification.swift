@@ -8,6 +8,7 @@ struct DisplayObservation: Equatable, Codable {
     var pixels: CGSize
     var logical: CGSize
     var refresh: Double
+    var active: Bool
     var mirrored: Bool
     var main: Bool
     var vendor: UInt32
@@ -16,7 +17,7 @@ struct DisplayObservation: Equatable, Codable {
     var json: [String: Any] {
         ["id": id, "uuid": uuid, "bounds": ["x": bounds.minX, "y": bounds.minY, "width": bounds.width, "height": bounds.height],
          "pixels": ["width": pixels.width, "height": pixels.height], "logical": ["width": logical.width, "height": logical.height],
-         "refresh_hz": refresh, "mirrored": mirrored, "main": main, "vendor": vendor, "product": product, "serial": serial]
+         "refresh_hz": refresh, "active": active, "mirrored": mirrored, "main": main, "vendor": vendor, "product": product, "serial": serial]
     }
 }
 @MainActor final class DisplayQualification {
@@ -42,51 +43,27 @@ struct DisplayObservation: Equatable, Codable {
         catch { throw ProbeFailure("Virtual-display capability unavailable: \(error)", kind: .setup) }
         owned.append(display)
         try SystemObservation.wait("virtual display \(display.displayID) to become active") {
-            try DisplayReadout.identifiers(profile: profile, kind: .setup).contains(display.displayID) && CGDisplayIsActive(display.displayID) != 0
+            try DisplayReadout.read(profile: profile, kind: .setup).contains(where: { $0.id == display.displayID && $0.active })
         }
         return display
     }
     private func configure(_ origins: [CGDirectDisplayID: CGPoint]) throws {
-        var stage = "CGBeginDisplayConfiguration"
-        var target: CGDirectDisplayID?
-        var status = CGError.success
-        do {
-            var configuration: CGDisplayConfigRef?
-            status = CGBeginDisplayConfiguration(&configuration)
-            guard status == .success, let configuration else { throw ProbeFailure("\(stage) failed with CGError \(status.rawValue)") }
-            var completed = false
-            defer { if !completed { CGCancelDisplayConfiguration(configuration) } }
-            for id in origins.keys.sorted() {
-                guard let point = origins[id] else { continue }
-                target = id
-                stage = "CGConfigureDisplayMirrorOfDisplay"
-                status = CGConfigureDisplayMirrorOfDisplay(configuration, id, kCGNullDirectDisplay)
-                guard status == .success else { throw ProbeFailure("\(stage) failed for display \(id) with CGError \(status.rawValue)", kind: .assertion) }
-                stage = "CGConfigureDisplayOrigin"
-                status = CGConfigureDisplayOrigin(configuration, id, Int32(point.x), Int32(point.y))
-                guard status == .success else { throw ProbeFailure("\(stage) failed for display \(id) with CGError \(status.rawValue)", kind: .assertion) }
+        do { try DisplayConfigurationHelper.apply(origins, profile: profile) }
+        catch {
+            var row: [String: Any] = ["phase": "display-configuration-failed", "error": String(describing: error)]
+            if let failure = error as? DisplayConfigurationFailure {
+                row["stage"] = failure.reply.stage
+                if let target = failure.reply.target { row["target_display"] = target }
+                if let code = failure.reply.cgError { row["cg_error"] = code }
             }
-            target = nil
-            stage = "CGCompleteDisplayConfiguration"
-            status = CGCompleteDisplayConfiguration(configuration, .forSession)
-            guard status == .success else { throw ProbeFailure("\(stage) failed with CGError \(status.rawValue)", kind: .assertion) }
-            completed = true
-        } catch {
-            var row: [String: Any] = ["phase": "display-configuration-failed", "stage": stage, "cg_error": status.rawValue, "error": String(describing: error), "requested_origins": origins.keys.sorted().map { id in ["id": id, "x": origins[id]!.x, "y": origins[id]!.y] as [String: Any] }]
-            if let target { row["target_display"] = target }
-            do { row["parent_online_ids"] = try DisplayReadout.rawIdentifiers(kind: .assertion) }
-            catch { row["parent_online_ids_error"] = String(describing: error) }
-            do { row["fresh_online_ids"] = try DisplayReadout.identifiers(profile: profile, kind: .assertion) }
-            catch { row["fresh_online_ids_error"] = String(describing: error) }
-            evidence.append(row)
-            throw error
+            evidence.append(row); throw error
         }
         try SystemObservation.wait("observed display arrangement", kind: .assertion) {
             let topology = try self.observe()
             return origins.allSatisfy { id, point in topology.contains { $0.id == id && $0.bounds.origin == point && !$0.mirrored } }
         }
     }
-    func qualify(placeWindows: (CGDirectDisplayID, CGDirectDisplayID) throws -> Void) throws {
+    func qualify(placeWindows: (DisplayObservation, DisplayObservation) throws -> Void) throws {
         evidence.append(["phase": "baseline", "displays": baseline.map(\.json)])
         let a = try create(width: 1440, height: 900, hiDPI: false, serial: 791101)
         let b = try create(width: 2560, height: 1600, hiDPI: true, serial: 791102)
@@ -101,11 +78,13 @@ struct DisplayObservation: Equatable, Codable {
         origins[a.displayID] = CGPoint(x: (baseline.map { $0.bounds.minX }.min() ?? 0) - oa.bounds.width, y: 0)
         origins[b.displayID] = CGPoint(x: 0, y: (baseline.map { $0.bounds.minY }.min() ?? 0) - ob.bounds.height)
         try configure(origins)
-        evidence.append(["phase": "left-and-above", "displays": try self.observe().map(\.json)])
-        try placeWindows(a.displayID, b.displayID)
+        let arranged = try self.observe()
+        evidence.append(["phase": "left-and-above", "displays": arranged.map(\.json)])
+        guard let first = arranged.first(where: { $0.id == a.displayID }), let second = arranged.first(where: { $0.id == b.displayID }) else { throw ProbeFailure("Observed placement displays missing", kind: .assertion) }
+        try placeWindows(first, second)
         let shift = CGPoint(x: -origins[a.displayID]!.x, y: 0)
         try configure(origins.mapValues { CGPoint(x: $0.x + shift.x, y: $0.y + shift.y) })
-        guard CGMainDisplayID() == a.displayID else { throw ProbeFailure("Native main-display change was not observed", kind: .assertion) }
+        guard try self.observe().first(where: \.main)?.id == a.displayID else { throw ProbeFailure("Native main-display change was not observed", kind: .assertion) }
         evidence.append(["phase": "main-changed", "displays": try self.observe().map(\.json)])
         // Restore base as main before releasing the other display.
         try configure(origins)
@@ -121,8 +100,10 @@ struct DisplayObservation: Equatable, Codable {
         origins.removeValue(forKey: previousID)
         origins[readded.displayID] = CGPoint(x: 0, y: (baseline.map { $0.bounds.minY }.min() ?? 0) - ob.bounds.height)
         try configure(origins)
-        evidence.append(["phase": "reconnected", "displays": try self.observe().map(\.json)])
-        try placeWindows(a.displayID, readded.displayID)
+        let reconnected = try self.observe()
+        evidence.append(["phase": "reconnected", "displays": reconnected.map(\.json)])
+        guard let first = reconnected.first(where: { $0.id == a.displayID }), let second = reconnected.first(where: { $0.id == readded.displayID }) else { throw ProbeFailure("Observed reconnect placement missing", kind: .assertion) }
+        try placeWindows(first, second)
     }
     func cleanup() throws {
         let releasedIDs = owned.map(\.displayID)

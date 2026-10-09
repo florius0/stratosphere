@@ -85,10 +85,11 @@ enum WindowGeometry {
               let windows = result["windows"] as? [[String: Any]], windows.count == 2 else { throw ProbeFailure("Fixture observation identity mismatch", kind: .assertion) }
         return windows
     }
-    func placeWindows(on first: CGDirectDisplayID, and second: CGDirectDisplayID) throws {
+    func placeWindows(on first: DisplayObservation, and second: DisplayObservation) throws {
         guard let app, windows.count == 2 else { throw ProbeFailure("Fixture not discovered", kind: .assertion) }
-        for (index, display) in [first, second].enumerated() {
-            let window = windows[index], bounds = CGDisplayBounds(display)
+        for (index, observedDisplay) in [first, second].enumerated() {
+            let display = observedDisplay.id
+            let window = windows[index], bounds = observedDisplay.bounds
             let desired = CGRect(x: bounds.minX + 70, y: bounds.minY + 90, width: CGFloat(560 + index * 40), height: CGFloat(360 + index * 30))
             var point = desired.origin, size = desired.size
             guard let sizeValue = AXValueCreate(.cgSize, &size), let pointValue = AXValueCreate(.cgPoint, &point) else { throw ProbeFailure("Cannot create AX geometry values", kind: .assertion) }
