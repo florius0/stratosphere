@@ -23,6 +23,7 @@ import Darwin
             options = try Options.parse(Array(CommandLine.arguments.dropFirst()))
             guard let options else { print(Options.usage); return }
             report["profile"] = options.profile.rawValue
+            report["focus_experiment"] = FocusExperiment.enabled(ProcessInfo.processInfo.environment)
             let environment = ProcessInfo.processInfo.environment
             let buildMetadata = BuildMetadata.read(environment["STRATOSPHERE_BUILD_METADATA"])
             report["build_toolchain"] = buildMetadata.json

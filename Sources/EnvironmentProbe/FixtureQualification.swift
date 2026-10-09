@@ -2,6 +2,10 @@ import AppKit
 import ApplicationServices
 import Darwin
 
+enum FocusExperiment {
+    static func enabled(_ environment: [String: String]) -> Bool { environment["STRATOSPHERE_FOCUS_EXPERIMENT"] == "1" }
+}
+
 enum WindowGeometry {
     static func matches(_ actual: CGRect, _ desired: CGRect) -> Bool {
         abs(actual.minX - desired.minX) < 2 && abs(actual.minY - desired.minY) < 2 && abs(actual.width - desired.width) < 2 && abs(actual.height - desired.height) < 2
@@ -77,6 +81,11 @@ enum WindowGeometry {
             guard let sizeValue = AXValueCreate(.cgSize, &size), let pointValue = AXValueCreate(.cgPoint, &point) else { throw ProbeFailure("Cannot create AX geometry values", kind: .assertion) }
             try set(window, kAXSizeAttribute, sizeValue)
             try set(window, kAXPositionAttribute, pointValue)
+            if FocusExperiment.enabled(ProcessInfo.processInfo.environment) {
+                let title = try copy(window, kAXTitleAttribute) as? String ?? ""
+                focusExperiment(window: window, app: app, title: title, desired: desired, display: display, usedBounds: bounds)
+                throw ProbeFailure("Focus experiment completed; inspect per-stage evidence before selecting normal focus actions", kind: .assertion)
+            }
             try set(app, kAXFrontmostAttribute, kCFBooleanTrue)
             try set(window, kAXMainAttribute, kCFBooleanTrue)
             try set(window, kAXFocusedAttribute, kCFBooleanTrue)
@@ -113,13 +122,60 @@ enum WindowGeometry {
             evidence.append(readback)
         }
     }
-    private func placementFailure(window: AXUIElement, app: AXUIElement, title: String, desired: CGRect, display: CGDirectDisplayID, usedBounds: CGRect, error: Error) -> [String: Any] {
-        var row: [String: Any] = ["phase": "placement-failed", "error": String(describing: error), "title": title, "display": display, "pid": process.processIdentifier, "desired_frame": WindowGeometry.values(desired), "used_display_bounds": WindowGeometry.values(usedBounds), "parent_display_bounds": WindowGeometry.values(CGDisplayBounds(display)), "frontmost_pid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0]
+    private func focusExperiment(window: AXUIElement, app: AXUIElement, title: String, desired: CGRect, display: CGDirectDisplayID, usedBounds: CGRect) {
+        let start = ProcessInfo.processInfo.systemUptime
+        func capture(_ stage: String, status: Any) {
+            func readback(_ timing: String) {
+                var row = placementFailure(window: window, app: app, title: title, desired: desired, display: display, usedBounds: usedBounds, error: nil)
+                row["phase"] = "focus-experiment"
+                row["stage"] = stage
+                row["timing"] = timing
+                row["action_status"] = status
+                row["elapsed_ms"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+                evidence.append(row)
+            }
+            readback("immediate")
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            readback("after-runloop")
+        }
+        var writable: [String: Bool] = [:]
+        var capabilities: [String: Any] = ["phase": "focus-experiment-capabilities"]
+        for (name, element, attribute) in [("window_main", window, kAXMainAttribute), ("window_focused", window, kAXFocusedAttribute), ("application_focused_window", app, kAXFocusedWindowAttribute), ("application_frontmost", app, kAXFrontmostAttribute)] {
+            var settable = DarwinBoolean(false)
+            let status = AXUIElementIsAttributeSettable(element, attribute as CFString, &settable)
+            writable[name] = status == .success && settable.boolValue
+            capabilities[name] = ["status": status.rawValue, "settable": settable.boolValue]
+        }
+        evidence.append(capabilities)
+        capture("baseline", status: "read-only")
+        capture("app-frontmost", status: AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue).rawValue)
+        capture("raise-after-frontmost", status: AXUIElementPerformAction(window, kAXRaiseAction as CFString).rawValue)
+        capture("window-main", status: AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue).rawValue)
+        capture("window-focused", status: AXUIElementSetAttributeValue(window, kAXFocusedAttribute as CFString, kCFBooleanTrue).rawValue)
+        if writable["application_focused_window"] == true {
+            capture("application-focused-window", status: AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, window).rawValue)
+        } else { capture("application-focused-window", status: "not-settable") }
+        capture("raise-before-activation", status: AXUIElementPerformAction(window, kAXRaiseAction as CFString).rawValue)
+        capture("native-app-activation", status: NSRunningApplication(processIdentifier: process.processIdentifier)?.activate() ?? false)
+        capture("raise-after-activation", status: AXUIElementPerformAction(window, kAXRaiseAction as CFString).rawValue)
+        capture("frontmost-after-raise", status: AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue).rawValue)
+    }
+    private func placementFailure(window: AXUIElement, app: AXUIElement, title: String, desired: CGRect, display: CGDirectDisplayID, usedBounds: CGRect, error: Error?) -> [String: Any] {
+        var row: [String: Any] = ["phase": "placement-failed", "title": title, "display": display, "pid": process.processIdentifier, "desired_frame": WindowGeometry.values(desired), "used_display_bounds": WindowGeometry.values(usedBounds), "parent_display_bounds": WindowGeometry.values(CGDisplayBounds(display)), "frontmost_pid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0]
+        if let error { row["error"] = String(describing: error) }
         func record(_ key: String, _ read: () throws -> Any) {
             do { row[key] = try read() }
             catch { row[key + "_error"] = String(describing: error) }
         }
         record("ax_frame") { WindowGeometry.values(try geometry(window)) }
+        record("ax_main") {
+            guard let value = try copy(window, kAXMainAttribute) as? Bool else { throw ProbeFailure("AXMain is not Boolean") }
+            return value
+        }
+        record("ax_focused") {
+            guard let value = try copy(window, kAXFocusedAttribute) as? Bool else { throw ProbeFailure("AXFocused is not Boolean") }
+            return value
+        }
         record("fixture") {
             guard let own = try fixtureWindows().first(where: { $0["title"] as? String == title }) else { throw ProbeFailure("Fixture window absent") }
             return own
