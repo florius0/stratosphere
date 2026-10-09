@@ -101,10 +101,21 @@ struct DisplayObservation: Equatable, Codable {
         try placeWindows(a.displayID, readded.displayID)
     }
     func cleanup() throws {
+        let releasedIDs = owned.map(\.displayID)
         for display in owned { display.release() }
         owned.removeAll()
-        try SystemObservation.wait("owned displays to disappear", kind: .cleanup) {
-            Set(try DisplayReadout.identifiers(kind: .cleanup)) == Set(baseline.map(\.id))
+        var remainingIDs: [CGDirectDisplayID] = []
+        do {
+            try SystemObservation.wait("owned displays to disappear", kind: .cleanup) {
+                remainingIDs = try DisplayReadout.identifiers(kind: .cleanup)
+                return Set(remainingIDs) == Set(baseline.map(\.id))
+            }
+        } catch {
+            var row: [String: Any] = ["phase": "display-cleanup-failed", "error": String(describing: error), "released_ids": releasedIDs, "baseline_ids": baseline.map(\.id), "parent_online_ids": remainingIDs]
+            do { row["fresh_observer_displays"] = try observe(kind: .cleanup).map(\.json) }
+            catch { row["fresh_observer_error"] = String(describing: error) }
+            evidence.append(row)
+            throw error
         }
         try configure(Dictionary(uniqueKeysWithValues: baseline.map { ($0.id, $0.bounds.origin) }))
         let final = try self.observe(kind: .cleanup)

@@ -2,6 +2,13 @@ import AppKit
 import ApplicationServices
 import Darwin
 
+enum WindowGeometry {
+    static func matches(_ actual: CGRect, _ desired: CGRect) -> Bool {
+        abs(actual.minX - desired.minX) < 2 && abs(actual.minY - desired.minY) < 2 && abs(actual.width - desired.width) < 2 && abs(actual.height - desired.height) < 2
+    }
+    static func values(_ frame: CGRect) -> [String: CGFloat] { ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height] }
+}
+
 @MainActor final class FixtureQualification {
     private let process = OwnedProcess()
     private let binary: URL
@@ -61,9 +68,6 @@ import Darwin
               let windows = result["windows"] as? [[String: Any]], windows.count == 2 else { throw ProbeFailure("Fixture observation identity mismatch", kind: .assertion) }
         return windows
     }
-    private func close(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
-        abs(lhs.minX - rhs.minX) < 2 && abs(lhs.minY - rhs.minY) < 2 && abs(lhs.width - rhs.width) < 2 && abs(lhs.height - rhs.height) < 2
-    }
     func placeWindows(on first: CGDirectDisplayID, and second: CGDirectDisplayID) throws {
         guard let app, windows.count == 2 else { throw ProbeFailure("Fixture not discovered", kind: .assertion) }
         for (index, display) in [first, second].enumerated() {
@@ -80,8 +84,9 @@ import Darwin
             guard raised == .success else { throw ProbeFailure("AX raise failed: \(raised.rawValue)", kind: .assertion) }
             let title = try copy(window, kAXTitleAttribute) as? String ?? ""
             var readback: [String: Any] = [:]
-            try SystemObservation.wait("AX and native fixture geometry/focus on display \(display)", kind: .assertion) {
-                guard self.close(try self.geometry(window), desired),
+            do {
+                try SystemObservation.wait("AX and native fixture geometry/focus on display \(display)", kind: .assertion) {
+                guard WindowGeometry.matches(try self.geometry(window), desired),
                       let own = try? self.fixtureWindows().first(where: { $0["title"] as? String == title }),
                       own["key"] as? Bool == true, own["visible"] as? Bool == true,
                       (own["screen"] as? NSNumber)?.uint32Value == display,
@@ -90,7 +95,7 @@ import Darwin
                       let native = observed.first(where: { ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == self.process.processIdentifier }),
                       native[kCGWindowIsOnscreen as String] as? Bool == true,
                       let rawBounds = native[kCGWindowBounds as String] as? [String: Any],
-                      let rect = CGRect(dictionaryRepresentation: rawBounds as CFDictionary), self.close(rect, desired) else { return false }
+                      let rect = CGRect(dictionaryRepresentation: rawBounds as CFDictionary), WindowGeometry.matches(rect, desired) else { return false }
                 let system = AXUIElementCreateSystemWide()
                 AXUIElementSetMessagingTimeout(system, 2)
                 let focused = try self.copy(system, kAXFocusedApplicationAttribute)
@@ -101,8 +106,47 @@ import Darwin
                 readback = ["title": title, "display": display, "window_number": number, "native_bounds": rawBounds, "fixture": own, "focused_pid": focusedPID]
                 return true
             }
+            } catch {
+                evidence.append(placementFailure(window: window, app: app, title: title, desired: desired, display: display, usedBounds: bounds, error: error))
+                throw error
+            }
             evidence.append(readback)
         }
+    }
+    private func placementFailure(window: AXUIElement, app: AXUIElement, title: String, desired: CGRect, display: CGDirectDisplayID, usedBounds: CGRect, error: Error) -> [String: Any] {
+        var row: [String: Any] = ["phase": "placement-failed", "error": String(describing: error), "title": title, "display": display, "pid": process.processIdentifier, "desired_frame": WindowGeometry.values(desired), "used_display_bounds": WindowGeometry.values(usedBounds), "parent_display_bounds": WindowGeometry.values(CGDisplayBounds(display)), "frontmost_pid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0]
+        func record(_ key: String, _ read: () throws -> Any) {
+            do { row[key] = try read() }
+            catch { row[key + "_error"] = String(describing: error) }
+        }
+        record("ax_frame") { WindowGeometry.values(try geometry(window)) }
+        record("fixture") {
+            guard let own = try fixtureWindows().first(where: { $0["title"] as? String == title }) else { throw ProbeFailure("Fixture window absent") }
+            return own
+        }
+        record("native_window") {
+            guard let own = row["fixture"] as? [String: Any], let number = own["window_number"] as? NSNumber,
+                  let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, number.uint32Value) as? [[String: Any]],
+                  let native = list.first(where: { ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == process.processIdentifier }) else { throw ProbeFailure("Native fixture window unavailable") }
+            return native
+        }
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 2)
+        record("system_focused_pid") {
+            let focused = try copy(system, kAXFocusedApplicationAttribute)
+            guard CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw ProbeFailure("System focus is not an AX application") }
+            var pid: pid_t = 0
+            guard AXUIElementGetPid(focused as! AXUIElement, &pid) == .success else { throw ProbeFailure("System focused PID unavailable") }
+            return pid
+        }
+        record("system_focused_window_is_target") { CFEqual(try copy(system, kAXFocusedWindowAttribute), window) }
+        record("app_focused_window_is_target") { CFEqual(try copy(app, kAXFocusedWindowAttribute), window) }
+        record("app_focused_window_title") {
+            let focused = try copy(app, kAXFocusedWindowAttribute)
+            guard CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw ProbeFailure("App focus is not an AX window") }
+            return try copy(focused as! AXUIElement, kAXTitleAttribute) as? String ?? "unavailable"
+        }
+        return row
     }
     func cleanup() throws {
         try process.stop()
