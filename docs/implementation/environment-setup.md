@@ -18,6 +18,19 @@ tart run stratosphere-prepared
 
 In the test VM, create a dedicated test VM user with automatic GUI login and enable SSH for that user. Install only the public half of a dedicated test VM SSH key; keep the private half with the host user on the host. Do not include CI registrations or integration-account credentials in reusable images. These preparation steps use System Settings and the test VM user's account configuration.
 
+## Display scaling for interactive use
+
+For a sharp, readable test VM window, use point-based sizing and enable automatic display fitting on the stopped prepared image:
+
+```sh
+tart set stratosphere-prepared --display 1280x800pt --display-refit
+tart run stratosphere-prepared
+```
+
+[Tart's display fitting](https://raw.githubusercontent.com/openai/tart/2.37.0/Sources/tart/Commands/Run.swift) lets the test VM follow the window size and the host display's Retina density. The local preparation was checked at a 2× backing scale and visually confirmed by the host user. Selecting a larger 1× resolution alone can make controls smaller; enlarging a fixed low-resolution desktop can make it blurry.
+
+Desktop qualification must disable display refitting in its disposable test VM so resizing a host window cannot change the asserted topology. Keep the interactive setting on the prepared image separate from the run's fixed display configuration.
+
 ## Build identity and permissions
 
 Choose a persistent development-only signing identity and stable test VM installation path. The build wrapper accepts `--sign-identity` or `STRATOSPHERE_SIGN_IDENTITY`; it never creates/imports a certificate or changes keychains implicitly. An ad-hoc signed or unsigned build is suitable for build inspection, but does not prove permission-grant survival.
@@ -63,7 +76,7 @@ The hosted workflow uses its fresh GitHub runner directly, with an explicit host
 ## Qualification still required
 
 - Demonstrate the same probe on a fresh hosted runner and prepared SIP-enabled test VM; retain both result sets.
-- Test development signing/grant survival across changed builds and image clones at stable installation paths. The current disposable-run paths alone do not establish that evidence.
+- Test development signing/grant survival across changed builds and image clones at stable installation paths. The local development probe has retained its grant across the tested rebuilt artifacts and clones at these paths; this does not qualify installed-product onboarding or release updates.
 - Add the real daemon, app AX-stall fixture, independent watchdog and baseline-recovery scenario.
 - Add clean/prepared installed-product startup, permission revocation and signed update scenarios.
 - Qualify unattended admission/activity detection, host-controller termination, and return-to-work interruption before optional host CI.
