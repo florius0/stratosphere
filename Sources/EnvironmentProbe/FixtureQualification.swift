@@ -34,12 +34,14 @@ enum WindowGeometry {
 @MainActor final class FixtureQualification {
     private let process = OwnedProcess()
     private let binary: URL
+    private let profile: Profile
     private let observations: URL
     private var app: AXUIElement?
     private var windows: [AXUIElement] = []
     private let previousFrontmost: NSRunningApplication?
     private(set) var evidence: [[String: Any]] = []
-    init(bundle: URL, observations: URL) throws {
+    init(bundle: URL, observations: URL, profile: Profile) throws {
+        self.profile = profile
         self.observations = observations
         previousFrontmost = NSWorkspace.shared.frontmostApplication
         guard bundle.pathExtension == "app", let metadata = NSDictionary(contentsOf: bundle.appendingPathComponent("Contents/Info.plist")),
@@ -105,6 +107,7 @@ enum WindowGeometry {
                 focusExperiment(window: window, app: app, title: title, desired: desired, display: display, usedBounds: bounds)
                 throw ProbeFailure("Focus experiment completed; inspect per-stage evidence before selecting normal focus actions", kind: .assertion)
             }
+            do {
             try FixtureActivation.focus(activate: {
                 AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
             }, isActive: {
@@ -112,6 +115,23 @@ enum WindowGeometry {
             }, raise: {
                 AXUIElementPerformAction(window, kAXRaiseAction as CFString)
             })
+            } catch {
+                let title = (try? copy(window, kAXTitleAttribute)) as? String ?? "fixture window"
+                var row = placementFailure(window: window, app: app, title: title, desired: desired, display: display, usedBounds: bounds, error: error)
+                row["phase"] = "activation-failed"
+                row["target_pid"] = process.processIdentifier
+                do { row["owned_process_live"] = try process.isRunning() }
+                catch { row["owned_process_live_error"] = String(describing: error) }
+                row["native_application_active"] = NSRunningApplication(processIdentifier: process.processIdentifier)?.isActive ?? false
+                do {
+                    let fresh = try FocusReadout.read(target: process.processIdentifier, profile: profile)
+                    let data = try JSONEncoder().encode(fresh)
+                    row["fresh_focus_observer"] = try JSONSerialization.jsonObject(with: data)
+                    row["parent_frontmost_pid_after_observer"] = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+                    row["parent_native_active_after_observer"] = NSRunningApplication(processIdentifier: process.processIdentifier)?.isActive ?? false
+                } catch { row["fresh_focus_observer_error"] = String(describing: error) }
+                evidence.append(row); throw error
+            }
             let title = try copy(window, kAXTitleAttribute) as? String ?? ""
             var readback: [String: Any] = [:]
             do {
@@ -221,8 +241,11 @@ enum WindowGeometry {
         }
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 2)
+        var focusedApplication: CFTypeRef?
+        let focusStatus = AXUIElementCopyAttributeValue(system, kAXFocusedApplicationAttribute as CFString, &focusedApplication)
+        row["system_focused_application_status"] = focusStatus.rawValue
         record("system_focused_pid") {
-            let focused = try copy(system, kAXFocusedApplicationAttribute)
+            guard focusStatus == .success, let focused = focusedApplication else { throw ProbeFailure("AXFocusedApplication returned \(focusStatus.rawValue)") }
             guard CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw ProbeFailure("System focus is not an AX application") }
             var pid: pid_t = 0
             guard AXUIElementGetPid(focused as! AXUIElement, &pid) == .success else { throw ProbeFailure("System focused PID unavailable") }

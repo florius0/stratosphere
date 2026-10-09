@@ -5,6 +5,7 @@ import Darwin
 @main struct ProbeMain {
     @MainActor static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.first == "--observe-focus" { exit(FocusReadout.run(arguments)) }
         if arguments.first == "--configure-displays" { exit(DisplayConfigurationHelper.run(arguments)) }
         if let first = arguments.first, ["--observe-displays", "--observe-display-ids"].contains(first) { exit(DisplayReadout.run(arguments)) }
         var report: [String: Any] = ["schema_version": 1, "status": "setup-failed", "kind": "partial-environment-qualification",
@@ -49,7 +50,7 @@ import Darwin
             report["fixture_version"] = (NSDictionary(contentsOf: options.fixture.appendingPathComponent("Contents/Info.plist"))?["CFBundleShortVersionString"] as? String) ?? "unavailable"
             let observations = options.output.deletingLastPathComponent().appendingPathComponent("fixture-\(UUID().uuidString).json")
             try FileManager.default.createDirectory(at: observations.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let activeFixture = try FixtureQualification(bundle: options.fixture, observations: observations)
+            let activeFixture = try FixtureQualification(bundle: options.fixture, observations: observations, profile: options.profile)
             fixture = activeFixture
             try activeFixture.launchAndDiscover()
             let activeDisplays = try DisplayQualification(profile: options.profile)
