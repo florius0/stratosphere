@@ -25,23 +25,39 @@ struct DisplayConfigurationReply: Codable {
     let version: Int
     let success: Bool
     let stage: String
+    let kind: FailureKind?
     let target: CGDirectDisplayID?
     let cgError: Int32?
     let error: String?
 }
 struct DisplayConfigurationFailure: Error, CustomStringConvertible {
     let reply: DisplayConfigurationReply
+    let kind: FailureKind
     var description: String { reply.error ?? "Display configuration failed at \(reply.stage)" }
 }
 @MainActor enum DisplayConfigurationHelper {
-    static func apply(_ origins: [CGDirectDisplayID: CGPoint], profile: Profile, executable: String = CommandLine.arguments[0]) throws {
+    static func apply(_ origins: [CGDirectDisplayID: CGPoint], profile: Profile, kind: FailureKind = .assertion, executable: String = CommandLine.arguments[0]) throws {
         let request = try JSONEncoder().encode(DisplayConfigurationRequest.make(origins))
-        let output = try SystemObservation.command(executable, ["--configure-displays", "--profile", profile.rawValue, "--request", String(decoding: request, as: UTF8.self)], timeout: 8)
-        guard output.1.utf8.count <= 262_144, let reply = try? JSONDecoder().decode(DisplayConfigurationReply.self, from: Data(output.1.utf8)), reply.version == 1 else { throw ProbeFailure("Configuration helper returned malformed result", kind: .assertion) }
-        guard output.0 == 0, reply.success, reply.stage == "complete", reply.cgError == nil, reply.error == nil else { throw DisplayConfigurationFailure(reply: reply) }
+        let output: (Int32, String)
+        do { output = try SystemObservation.command(executable, ["--configure-displays", "--profile", profile.rawValue, "--request", String(decoding: request, as: UTF8.self)], timeout: 8) }
+        catch { throw commandFailure(error, kind: kind) }
+        guard output.1.utf8.count <= 262_144, let reply = try? JSONDecoder().decode(DisplayConfigurationReply.self, from: Data(output.1.utf8)), reply.version == 1 else { throw ProbeFailure("Configuration helper returned malformed result", kind: kind) }
+        if output.0 == 0, reply.success, reply.stage == "complete", reply.kind == nil, reply.cgError == nil, reply.error == nil { return }
+        let setupStages = ["guard", "preflight", "CGBeginDisplayConfiguration"]
+        let actionStages = ["CGConfigureDisplayMirrorOfDisplay", "CGConfigureDisplayOrigin", "CGCompleteDisplayConfiguration"]
+        guard !reply.success, let category = reply.kind, reply.error != nil,
+              (setupStages.contains(reply.stage) && category == .setup) || (actionStages.contains(reply.stage) && category == .assertion) || ((setupStages + actionStages).contains(reply.stage) && category == .cleanup) else {
+            throw ProbeFailure("Configuration helper returned invalid failure category", kind: kind)
+        }
+        throw DisplayConfigurationFailure(reply: reply, kind: kind == .cleanup ? .cleanup : category)
+    }
+    static func commandFailure(_ error: Error, kind: FailureKind) -> ProbeFailure {
+        if let failure = error as? ProbeFailure, failure.kind == .cleanup { return failure }
+        return ProbeFailure("Configuration helper command failed: \(error)", kind: kind)
     }
     static func run(_ arguments: [String]) -> Int32 {
         var stage = "guard", target: CGDirectDisplayID?, cgError: Int32?
+        var category = FailureKind.setup
         do {
             guard arguments.count == 5, arguments[0] == "--configure-displays", arguments[1] == "--profile", arguments[3] == "--request", let profile = Profile(rawValue: arguments[2]) else { throw ProbeFailure("Invalid display configuration helper arguments") }
             try DisplayReadout.validateContext(profile: profile)
@@ -54,6 +70,7 @@ struct DisplayConfigurationFailure: Error, CustomStringConvertible {
             var result = CGBeginDisplayConfiguration(&transaction)
             cgError = result.rawValue
             guard result == .success, let transaction else { throw ProbeFailure("\(stage) failed with CGError \(result.rawValue)") }
+            category = .assertion
             var committed = false
             defer { if !committed { CGCancelDisplayConfiguration(transaction) } }
             for origin in request.origins.sorted(by: { $0.id < $1.id }) {
@@ -61,21 +78,21 @@ struct DisplayConfigurationFailure: Error, CustomStringConvertible {
                 stage = "CGConfigureDisplayMirrorOfDisplay"
                 result = CGConfigureDisplayMirrorOfDisplay(transaction, origin.id, kCGNullDirectDisplay)
                 cgError = result.rawValue
-                guard result == .success else { throw ProbeFailure("\(stage) failed for display \(origin.id) with CGError \(result.rawValue)") }
+                guard result == .success else { throw ProbeFailure("\(stage) failed for display \(origin.id) with CGError \(result.rawValue)", kind: .assertion) }
                 stage = "CGConfigureDisplayOrigin"
                 result = CGConfigureDisplayOrigin(transaction, origin.id, origin.x, origin.y)
                 cgError = result.rawValue
-                guard result == .success else { throw ProbeFailure("\(stage) failed for display \(origin.id) with CGError \(result.rawValue)") }
+                guard result == .success else { throw ProbeFailure("\(stage) failed for display \(origin.id) with CGError \(result.rawValue)", kind: .assertion) }
             }
             stage = "CGCompleteDisplayConfiguration"; target = nil
             result = CGCompleteDisplayConfiguration(transaction, .forSession)
             cgError = result.rawValue
-            guard result == .success else { throw ProbeFailure("\(stage) failed with CGError \(result.rawValue)") }
+            guard result == .success else { throw ProbeFailure("\(stage) failed with CGError \(result.rawValue)", kind: .assertion) }
             committed = true
-            emit(DisplayConfigurationReply(version: 1, success: true, stage: "complete", target: nil, cgError: nil, error: nil))
+            emit(DisplayConfigurationReply(version: 1, success: true, stage: "complete", kind: nil, target: nil, cgError: nil, error: nil))
             return 0
         } catch {
-            emit(DisplayConfigurationReply(version: 1, success: false, stage: stage, target: target, cgError: cgError, error: String(describing: error)))
+            emit(DisplayConfigurationReply(version: 1, success: false, stage: stage, kind: (error as? ProbeFailure)?.kind ?? category, target: target, cgError: cgError, error: String(describing: error)))
             return 1
         }
     }

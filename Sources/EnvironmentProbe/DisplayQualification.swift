@@ -47,8 +47,8 @@ struct DisplayObservation: Equatable, Codable {
         }
         return display
     }
-    private func configure(_ origins: [CGDirectDisplayID: CGPoint]) throws {
-        do { try DisplayConfigurationHelper.apply(origins, profile: profile) }
+    private func configure(_ origins: [CGDirectDisplayID: CGPoint], kind: FailureKind = .assertion) throws {
+        do { try DisplayConfigurationHelper.apply(origins, profile: profile, kind: kind) }
         catch {
             var row: [String: Any] = ["phase": "display-configuration-failed", "error": String(describing: error)]
             if let failure = error as? DisplayConfigurationFailure {
@@ -58,8 +58,8 @@ struct DisplayObservation: Equatable, Codable {
             }
             evidence.append(row); throw error
         }
-        try SystemObservation.wait("observed display arrangement", kind: .assertion) {
-            let topology = try self.observe()
+        try SystemObservation.wait("observed display arrangement", kind: kind) {
+            let topology = try self.observe(kind: kind)
             return origins.allSatisfy { id, point in topology.contains { $0.id == id && $0.bounds.origin == point && !$0.mirrored } }
         }
     }
@@ -124,7 +124,7 @@ struct DisplayObservation: Equatable, Codable {
             evidence.append(row)
             throw error
         }
-        try configure(Dictionary(uniqueKeysWithValues: baseline.map { ($0.id, $0.bounds.origin) }))
+        try configure(Dictionary(uniqueKeysWithValues: baseline.map { ($0.id, $0.bounds.origin) }), kind: .cleanup)
         let final = try self.observe(kind: .cleanup)
         guard final == baseline else { throw ProbeFailure("Display cleanup did not restore baseline modes, origins, identity, and main display", kind: .cleanup) }
         evidence.append(["phase": "restored", "displays": final.map(\.json)])

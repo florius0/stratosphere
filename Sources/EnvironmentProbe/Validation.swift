@@ -1,6 +1,6 @@
 import Foundation
 
-enum FailureKind {
+enum FailureKind: String, Codable {
     case setup, assertion, cleanup
     var status: String { self == .setup ? "setup-failed" : "failed" }
 }

@@ -31,7 +31,7 @@ struct DisplayConfigurationTests {
         #expect(decoded.origins.last?.x == -1440)
         try "#!/bin/sh\nprintf '%s' '{}'\n".write(to: script, atomically: true, encoding: .utf8); chmod(script.path, 0o700)
         #expect(throws: ProbeFailure.self) { try DisplayConfigurationHelper.apply([1: .zero], profile: .guest, executable: script.path) }
-        let failure = "#!/bin/sh\nprintf '%s' '{\"version\":1,\"success\":false,\"stage\":\"CGConfigureDisplayOrigin\",\"target\":4,\"cgError\":1001,\"error\":\"native failure\"}'\nexit 1\n"
+        let failure = "#!/bin/sh\nprintf '%s' '{\"version\":1,\"success\":false,\"stage\":\"CGConfigureDisplayOrigin\",\"kind\":\"assertion\",\"target\":4,\"cgError\":1001,\"error\":\"native failure\"}'\nexit 1\n"
         try failure.write(to: script, atomically: true, encoding: .utf8); chmod(script.path, 0o700)
         do { try DisplayConfigurationHelper.apply([1: .zero], profile: .guest, executable: script.path); Issue.record("Native helper failure accepted") }
         catch let error as DisplayConfigurationFailure { #expect(error.reply.target == 4); #expect(error.reply.cgError == 1001) }

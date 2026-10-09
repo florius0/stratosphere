@@ -59,7 +59,7 @@ import Darwin
             report["status"] = "passed"
             exitCode = 0
         } catch {
-            report["status"] = (error as? ProbeFailure)?.status ?? fallback.status
+            report["status"] = (error as? ProbeFailure)?.status ?? (error as? DisplayConfigurationFailure)?.kind.status ?? fallback.status
             report["error"] = String(describing: error)
         }
         // Always finish cleanup before atomically publishing a final result.

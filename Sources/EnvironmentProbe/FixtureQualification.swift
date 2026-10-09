@@ -3,6 +3,11 @@ import ApplicationServices
 import Darwin
 
 @MainActor enum FixtureActivation {
+    static func readiness(_ status: AXError) throws -> Bool {
+        if status == .cannotComplete { return false }
+        guard status == .success else { throw ProbeFailure("AX read AXFocusedApplication failed with \(status.rawValue)", kind: .assertion) }
+        return true
+    }
     static func matches(owner: pid_t, system: pid_t?, workspace: pid_t?) -> Bool { owner > 0 && system == owner && workspace == owner }
     static func focus(activate: () throws -> AXError, isActive: () throws -> Bool, raise: () throws -> AXError, timeout: Double = 8) throws {
         if try !isActive() {
@@ -142,8 +147,10 @@ enum WindowGeometry {
         guard try process.isRunning() else { throw ProbeFailure("Owned fixture exited during activation", kind: .assertion) }
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 2)
-        let focused = try copy(system, kAXFocusedApplicationAttribute)
-        guard CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw ProbeFailure("System focus is not an AX application", kind: .assertion) }
+        var value: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(system, kAXFocusedApplicationAttribute as CFString, &value)
+        guard try FixtureActivation.readiness(status) else { return false }
+        guard let focused = value, CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw ProbeFailure("System focus is not an AX application", kind: .assertion) }
         var pid: pid_t = 0
         guard AXUIElementGetPid(focused as! AXUIElement, &pid) == .success else { throw ProbeFailure("System focused PID unavailable", kind: .assertion) }
         return FixtureActivation.matches(owner: process.processIdentifier, system: pid, workspace: NSWorkspace.shared.frontmostApplication?.processIdentifier)
