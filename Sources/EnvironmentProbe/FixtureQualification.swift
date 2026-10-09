@@ -2,6 +2,19 @@ import AppKit
 import ApplicationServices
 import Darwin
 
+@MainActor enum FixtureActivation {
+    static func matches(owner: pid_t, system: pid_t?, workspace: pid_t?) -> Bool { owner > 0 && system == owner && workspace == owner }
+    static func focus(activate: () throws -> AXError, isActive: () throws -> Bool, raise: () throws -> AXError, timeout: Double = 8) throws {
+        if try !isActive() {
+            let status = try activate()
+            guard status == .success else { throw ProbeFailure("AX activation failed: \(status.rawValue)", kind: .assertion) }
+            try SystemObservation.wait("owned fixture application activation", seconds: timeout, kind: .assertion, isActive)
+        }
+        let status = try raise()
+        guard status == .success else { throw ProbeFailure("AX raise failed: \(status.rawValue)", kind: .assertion) }
+    }
+}
+
 enum FocusExperiment {
     static func enabled(_ environment: [String: String]) -> Bool { environment["STRATOSPHERE_FOCUS_EXPERIMENT"] == "1" }
 }
@@ -86,11 +99,13 @@ enum WindowGeometry {
                 focusExperiment(window: window, app: app, title: title, desired: desired, display: display, usedBounds: bounds)
                 throw ProbeFailure("Focus experiment completed; inspect per-stage evidence before selecting normal focus actions", kind: .assertion)
             }
-            try set(app, kAXFrontmostAttribute, kCFBooleanTrue)
-            try set(window, kAXMainAttribute, kCFBooleanTrue)
-            try set(window, kAXFocusedAttribute, kCFBooleanTrue)
-            let raised = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-            guard raised == .success else { throw ProbeFailure("AX raise failed: \(raised.rawValue)", kind: .assertion) }
+            try FixtureActivation.focus(activate: {
+                AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+            }, isActive: {
+                try self.ownedApplicationIsActive()
+            }, raise: {
+                AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+            })
             let title = try copy(window, kAXTitleAttribute) as? String ?? ""
             var readback: [String: Any] = [:]
             do {
@@ -121,6 +136,16 @@ enum WindowGeometry {
             }
             evidence.append(readback)
         }
+    }
+    private func ownedApplicationIsActive() throws -> Bool {
+        guard try process.isRunning() else { throw ProbeFailure("Owned fixture exited during activation", kind: .assertion) }
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 2)
+        let focused = try copy(system, kAXFocusedApplicationAttribute)
+        guard CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw ProbeFailure("System focus is not an AX application", kind: .assertion) }
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(focused as! AXUIElement, &pid) == .success else { throw ProbeFailure("System focused PID unavailable", kind: .assertion) }
+        return FixtureActivation.matches(owner: process.processIdentifier, system: pid, workspace: NSWorkspace.shared.frontmostApplication?.processIdentifier)
     }
     private func focusExperiment(window: AXUIElement, app: AXUIElement, title: String, desired: CGRect, display: CGDirectDisplayID, usedBounds: CGRect) {
         let start = ProcessInfo.processInfo.systemUptime
