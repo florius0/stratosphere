@@ -34,19 +34,19 @@ Nix's Git-flake source includes tracked files. Include the pre-existing untracke
 
 Open the package in Xcode for editing and previews, or launch the standalone catalog. It includes busy rails, a deep hover preview, partial failure, and interruptible expansion. The components and fixtures are shared. Actions are logged rather than sent to a live manager. The hover story includes actual nonactivating native panels.
 
-Stories and deterministic tests can run on the personal desktop. Desktop-mutating probes cannot.
+Stories and deterministic tests can run on the host user's desktop. Desktop-mutating probes cannot.
 
 ## Isolated macOS qualification
 
 ```sh
 nix run .#e2e-vm -- --image stratosphere-prepared \
   --artifacts .local/build \
-  --ssh-key /absolute/path/to/dedicated-guest-key
+  --ssh-key /absolute/path/to/test-vm-key
 ```
 
-This requires a prepared, stopped local Tart image with automatic GUI login, dedicated SSH access, and qualified AX permissions. See [environment preparation](docs/implementation/environment-setup.md). The wrapper never downloads an image implicitly, clones before running, executes in the guest's GUI launch domain, collects results, and discards only its own clone.
+This requires a prepared, stopped local Tart image with automatic GUI login, dedicated SSH access, and qualified AX permissions. See [environment preparation](docs/implementation/environment-setup.md). The wrapper never downloads an image implicitly, clones before running, executes in the test VM's GUI launch domain, collects results, and discards only its own clone.
 
-Build `.local/build` with your persistent signing identity for this prepared-guest route. Without `--artifacts`, the Nix entrypoints use the unsigned store build, which needs its own qualified controlled-launch permissions; it cannot establish persistent development-grant survival.
+Build `.local/build` with your persistent signing identity for this prepared test VM route. Without `--artifacts`, the Nix entrypoints use the unsigned store build, which needs its own qualified controlled-launch permissions; it cannot establish persistent development-grant survival.
 
 The native entrypoint also runs directly on GitHub-hosted macOS runners:
 

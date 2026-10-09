@@ -12,7 +12,7 @@
 
 - macOS 26+ Apple Silicon only; SIP-enabled core.
 - Synthetic fixtures; no deterministic tests depend on personal apps/data.
-- Desktop-mutating tests run only on hosted runners or disposable guests.
+- Desktop-mutating tests run only on hosted runners or disposable test VMs.
 - Shared production UI components and reproducible/replayable stories.
 - Keep Q-01–Q-13 mechanisms unresolved outside explicitly implemented domain rules.
 - Preserve the existing uncommitted product documents; do not include them in foundation commits.
@@ -53,11 +53,11 @@
 
 **Files:** `Sources/FixtureApp/*.swift`, `Sources/EnvironmentProbe/*.swift`, `E2E/*.py`, `Tests/ToolTests/*.py`, `.github/workflows/*.yml`, `docs/implementation/environment-setup.md`.
 
-**Interfaces:** `EnvironmentProbe --profile hosted|guest --fixture PATH --output PATH` produces structured environment/results JSON and a nonzero exit for missing requirements. `E2E/native.py` enforces the isolated profile and invokes the probe. `E2E/vm.py` accepts a configured prepared image and guest GUI account; clones, transfers, collects, and cleans up.
+**Interfaces:** `EnvironmentProbe --profile hosted|guest --fixture PATH --output PATH` produces structured environment/results JSON and a nonzero exit for missing requirements. `E2E/native.py` enforces the isolated profile and invokes the probe. `E2E/vm.py` accepts a configured prepared image and test VM user account; clones, transfers, collects, and cleans up.
 
-- [x] Write wrapper tests proving absent isolation is refused and owned guest teardown occurs on failure.
+- [x] Write wrapper tests proving absent isolation is refused and owned test VM teardown occurs on failure.
 - [x] Add real AppKit fixture and AX/display probe; compile without mutating the host desktop.
-- [x] Implement bounded guest lifecycle and qualification workflow; preserve result/log artifacts on failure.
+- [x] Implement bounded test VM lifecycle and qualification workflow; preserve result/log artifacts on failure.
 - [x] Attempt isolated qualification when prerequisites exist; retain a concrete pending checklist for daemon/watchdog, grant survival, and hardware evidence.
 
 ## Task 5: Review and evidence
@@ -72,4 +72,4 @@
 
 Implemented and reviewed the code/build foundation. Full pinned Nix checks pass: 45 Swift Testing tests and 20 Python tooling tests. The Xcode route passes the same suites. Native catalog and packaged artifacts were inspected; exact evidence and remaining limits are in [foundation verification](foundation-verification.md).
 
-The prerequisite inspection for Task 4 found no prepared Tart image/dedicated guest key, no configured Git remote, and no persistent signing identity. No actual guest/hosted AX or display qualification was attempted. That part of the proposed first milestone remains outstanding, with preparation and acceptance steps in [environment setup](environment-setup.md). Checkmarks above record implemented tooling and executed checks; they do not establish live platform feasibility.
+The prerequisite inspection for Task 4 found no prepared Tart image/dedicated test VM key, no configured Git remote, and no persistent signing identity. No actual test VM/hosted AX or display qualification was attempted. That part of the proposed first milestone remains outstanding, with preparation and acceptance steps in [environment setup](environment-setup.md). Checkmarks above record implemented tooling and executed checks; they do not establish live platform feasibility.
