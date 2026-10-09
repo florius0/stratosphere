@@ -47,16 +47,40 @@ struct DisplayObservation: Equatable, Codable {
         return display
     }
     private func configure(_ origins: [CGDirectDisplayID: CGPoint]) throws {
-        var configuration: CGDisplayConfigRef?
-        guard CGBeginDisplayConfiguration(&configuration) == .success, let configuration else { throw ProbeFailure("Display configuration unavailable") }
-        var completed = false
-        defer { if !completed { CGCancelDisplayConfiguration(configuration) } }
-        for (id, point) in origins {
-            guard CGConfigureDisplayMirrorOfDisplay(configuration, id, kCGNullDirectDisplay) == .success,
-                  CGConfigureDisplayOrigin(configuration, id, Int32(point.x), Int32(point.y)) == .success else { throw ProbeFailure("Cannot configure extended display origins", kind: .assertion) }
+        var stage = "CGBeginDisplayConfiguration"
+        var target: CGDirectDisplayID?
+        var status = CGError.success
+        do {
+            var configuration: CGDisplayConfigRef?
+            status = CGBeginDisplayConfiguration(&configuration)
+            guard status == .success, let configuration else { throw ProbeFailure("\(stage) failed with CGError \(status.rawValue)") }
+            var completed = false
+            defer { if !completed { CGCancelDisplayConfiguration(configuration) } }
+            for id in origins.keys.sorted() {
+                guard let point = origins[id] else { continue }
+                target = id
+                stage = "CGConfigureDisplayMirrorOfDisplay"
+                status = CGConfigureDisplayMirrorOfDisplay(configuration, id, kCGNullDirectDisplay)
+                guard status == .success else { throw ProbeFailure("\(stage) failed for display \(id) with CGError \(status.rawValue)", kind: .assertion) }
+                stage = "CGConfigureDisplayOrigin"
+                status = CGConfigureDisplayOrigin(configuration, id, Int32(point.x), Int32(point.y))
+                guard status == .success else { throw ProbeFailure("\(stage) failed for display \(id) with CGError \(status.rawValue)", kind: .assertion) }
+            }
+            target = nil
+            stage = "CGCompleteDisplayConfiguration"
+            status = CGCompleteDisplayConfiguration(configuration, .forSession)
+            guard status == .success else { throw ProbeFailure("\(stage) failed with CGError \(status.rawValue)", kind: .assertion) }
+            completed = true
+        } catch {
+            var row: [String: Any] = ["phase": "display-configuration-failed", "stage": stage, "cg_error": status.rawValue, "error": String(describing: error), "requested_origins": origins.keys.sorted().map { id in ["id": id, "x": origins[id]!.x, "y": origins[id]!.y] as [String: Any] }]
+            if let target { row["target_display"] = target }
+            do { row["parent_online_ids"] = try DisplayReadout.rawIdentifiers(kind: .assertion) }
+            catch { row["parent_online_ids_error"] = String(describing: error) }
+            do { row["fresh_online_ids"] = try DisplayReadout.identifiers(profile: profile, kind: .assertion) }
+            catch { row["fresh_online_ids_error"] = String(describing: error) }
+            evidence.append(row)
+            throw error
         }
-        guard CGCompleteDisplayConfiguration(configuration, .forSession) == .success else { throw ProbeFailure("Display configuration rejected", kind: .assertion) }
-        completed = true
         try SystemObservation.wait("observed display arrangement", kind: .assertion) {
             let topology = try self.observe()
             return origins.allSatisfy { id, point in topology.contains { $0.id == id && $0.bounds.origin == point && !$0.mirrored } }
