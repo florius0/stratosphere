@@ -3,12 +3,7 @@ import ApplicationServices
 import Darwin
 
 @MainActor enum FixtureActivation {
-    static func readiness(_ status: AXError) throws -> Bool {
-        if status == .cannotComplete { return false }
-        guard status == .success else { throw ProbeFailure("AX read AXFocusedApplication failed with \(status.rawValue)", kind: .assertion) }
-        return true
-    }
-    static func matches(owner: pid_t, system: pid_t?, workspace: pid_t?) -> Bool { owner > 0 && system == owner && workspace == owner }
+    static func matches(owner: pid_t, live: Bool, nativeActive: Bool?, workspace: pid_t?, appFrontmost: Bool?) -> Bool { owner > 0 && live && nativeActive == true && workspace == owner && appFrontmost == true }
     static func focus(activate: () throws -> AXError, isActive: () throws -> Bool, raise: () throws -> AXError, timeout: Double = 8) throws {
         if try !isActive() {
             let status = try activate()
@@ -38,6 +33,7 @@ enum WindowGeometry {
     private let observations: URL
     private var app: AXUIElement?
     private var windows: [AXUIElement] = []
+    private var activationSignals: [String: Any] = [:]
     private let previousFrontmost: NSRunningApplication?
     private(set) var evidence: [[String: Any]] = []
     init(bundle: URL, observations: URL, profile: Profile) throws {
@@ -120,6 +116,7 @@ enum WindowGeometry {
                 var row = placementFailure(window: window, app: app, title: title, desired: desired, display: display, usedBounds: bounds, error: error)
                 row["phase"] = "activation-failed"
                 row["target_pid"] = process.processIdentifier
+                row["activation_signals"] = activationSignals
                 do { row["owned_process_live"] = try process.isRunning() }
                 catch { row["owned_process_live_error"] = String(describing: error) }
                 row["native_application_active"] = NSRunningApplication(processIdentifier: process.processIdentifier)?.isActive ?? false
@@ -132,6 +129,10 @@ enum WindowGeometry {
                 } catch { row["fresh_focus_observer_error"] = String(describing: error) }
                 evidence.append(row); throw error
             }
+            var activated = activationSignals
+            activated["phase"] = "activation-ready"
+            activated["display"] = display
+            evidence.append(activated)
             let title = try copy(window, kAXTitleAttribute) as? String ?? ""
             var readback: [String: Any] = [:]
             do {
@@ -164,16 +165,27 @@ enum WindowGeometry {
         }
     }
     private func ownedApplicationIsActive() throws -> Bool {
-        guard try process.isRunning() else { throw ProbeFailure("Owned fixture exited during activation", kind: .assertion) }
-        let system = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(system, 2)
+        let owner = process.processIdentifier
+        let live = try process.isRunning()
+        activationSignals = ["target_pid": owner, "owned_process_live": live]
+        guard live, let app else { throw ProbeFailure("Owned fixture exited during activation", kind: .assertion) }
+        var applicationPID: pid_t = 0
+        let identityStatus = AXUIElementGetPid(app, &applicationPID)
+        guard identityStatus == .success, applicationPID == owner else { throw ProbeFailure("Owned AX application identity mismatch", kind: .assertion) }
+        // Activation is foreground application state. Keyboard focus is checked
+        // only after AXRaise by the unchanged independent focus assertions.
+        let native = NSRunningApplication(processIdentifier: owner)?.isActive
+        let workspace = NSWorkspace.shared.frontmostApplication?.processIdentifier
         var value: CFTypeRef?
-        let status = AXUIElementCopyAttributeValue(system, kAXFocusedApplicationAttribute as CFString, &value)
-        guard try FixtureActivation.readiness(status) else { return false }
-        guard let focused = value, CFGetTypeID(focused) == AXUIElementGetTypeID() else { throw ProbeFailure("System focus is not an AX application", kind: .assertion) }
-        var pid: pid_t = 0
-        guard AXUIElementGetPid(focused as! AXUIElement, &pid) == .success else { throw ProbeFailure("System focused PID unavailable", kind: .assertion) }
-        return FixtureActivation.matches(owner: process.processIdentifier, system: pid, workspace: NSWorkspace.shared.frontmostApplication?.processIdentifier)
+        let status = AXUIElementCopyAttributeValue(app, kAXFrontmostAttribute as CFString, &value)
+        let frontmost = value as? Bool
+        activationSignals["native_active"] = native.map { $0 as Any } ?? NSNull()
+        activationSignals["workspace_pid"] = workspace.map { $0 as Any } ?? NSNull()
+        activationSignals["app_frontmost_status"] = status.rawValue
+        activationSignals["app_frontmost"] = frontmost.map { $0 as Any } ?? NSNull()
+        guard status == .success else { throw ProbeFailure("AX read owned AXFrontmost failed with \(status.rawValue)", kind: .assertion) }
+        guard frontmost != nil else { throw ProbeFailure("Owned AXFrontmost is not Boolean", kind: .assertion) }
+        return FixtureActivation.matches(owner: owner, live: live, nativeActive: native, workspace: workspace, appFrontmost: frontmost)
     }
     private func focusExperiment(window: AXUIElement, app: AXUIElement, title: String, desired: CGRect, display: CGDirectDisplayID, usedBounds: CGRect) {
         let start = ProcessInfo.processInfo.systemUptime
