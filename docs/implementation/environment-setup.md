@@ -75,7 +75,7 @@ The hosted workflow uses its fresh GitHub runner directly, with an explicit host
 
 ## Qualification still required
 
-- Demonstrate the same probe on a fresh hosted runner and prepared SIP-enabled test VM; retain both result sets.
+- Demonstrate the same probe on a fresh hosted runner. The local SIP-enabled test VM probe passed on 2026-10-10; retain both environment result sets when hosted evidence is available.
 - Test development signing/grant survival across changed builds and image clones at stable installation paths. The local development probe has retained its grant across the tested rebuilt artifacts and clones at these paths; this does not qualify installed-product onboarding or release updates.
 - Add the real daemon, app AX-stall fixture, independent watchdog and baseline-recovery scenario.
 - Add clean/prepared installed-product startup, permission revocation and signed update scenarios.
