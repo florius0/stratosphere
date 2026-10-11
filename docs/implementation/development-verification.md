@@ -174,3 +174,17 @@ Executed evidence:
 - Existing staged edits were preserved; concurrent user-owned icon assets were retained. Whitespace checks passed.
 
 Synthetic fixtures establish controller/refactor behavior only. No live VM provisioning, hosted qualification, desktop-mutating probe or UI appearance review ran for this extraction. Existing product/integration/recovery qualification limits remain unchanged.
+
+## Hosted SIP evidence policy — 2026-10-12
+
+The first hosted run (38162207293, revision aca44c353e12005c8286089c000bba1e488ba47b) built/signed successfully, then failed setup with `System Integrity Protection status: disabled.` on macOS 26.6.2 (25G83), ARM64 VirtualMac2,1, runner image 20260907.0351.1. It performed no AX/display qualification. The [approved revision](2026-10-12-hosted-probe-policy.md) permits supplemental hosted regression evidence with explicitly observed disabled SIP; guest probes still require enabled SIP. Reports distinguish SIP-enabled evidence, and native wrappers print probe diagnostics. NFR-01/D-23 remain unchanged.
+
+Verification: `nix run .#test` passed all 82 tests in 18 suites, including enabled/disabled/unknown/custom SIP states and observation failure. Wrapper behavior checks passed, and documentation links/product references and DOT syntax passed across 25 files. No live desktop probe ran for this change. Hosted AX/display support still requires a new CI run; prior SIP-enabled local VM evidence retains its recorded scope.
+
+## Hosted display helper SIP policy correction — 2026-10-12
+
+Hosted run 38195709832 reached a trusted AX process and discovered both fixture windows, but the separate display configuration helper still required SIP enabled. That guard also rejected baseline restoration. The helper now uses the same profile-aware SIP policy as the main probe, retaining independent isolation validation and the SIP-enabled guest requirement. This corrects an omitted boundary in the prior change; actual hosted display configuration and cleanup remain unqualified until rerun.
+
+## Hosted baseline activation correction — 2026-10-12
+
+Run 38201506980 completed window/display scenarios and display restoration but failed baseline cleanup. Diagnostics identified `com.apple.AccessibilityUIServer`: native active state, workspace frontmost PID and application AXFrontmost all agreed on baseline PID 482, while every system-wide focused-application AX query returned cannotComplete (-25204). Cleanup now verifies baseline foreground activation using the existing three-signal matcher; it no longer requires system-wide keyboard-focus availability for a baseline application. Fixture window keyboard-focus assertions remain unchanged. No exception by bundle ID or hosted profile is introduced. A subsequent hosted run is still required to validate final cleanup.

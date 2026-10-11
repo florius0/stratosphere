@@ -459,20 +459,36 @@ enum WindowGeometry {
     guard previousFrontmost.activate() else {
       throw ProbeFailure("Baseline focus activation rejected for PID \(pid)", kind: .cleanup)
     }
-    try SystemObservation.wait("baseline frontmost PID \(pid)", seconds: 3, kind: .cleanup) {
-      if previousFrontmost.isTerminated { return true }
-      guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return false }
-      if AXIsProcessTrusted() {
-        let system = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(system, 1)
-        guard let value = try? self.copy(system, kAXFocusedApplicationAttribute, kind: .cleanup)
-        else { return false }
-        guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return false }
-        var observed: pid_t = 0
-        guard AXUIElementGetPid(value as! AXUIElement, &observed) == .success, observed == pid
-        else { return false }
+    do {
+      try SystemObservation.wait("baseline frontmost PID \(pid)", seconds: 3, kind: .cleanup) {
+        if previousFrontmost.isTerminated { return true }
+        let workspace = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        if AXIsProcessTrusted() {
+          let application = AXUIElementCreateApplication(pid)
+          AXUIElementSetMessagingTimeout(application, 1)
+          let value = try self.copy(application, kAXFrontmostAttribute, kind: .cleanup) as? Bool
+          return FixtureActivation.matches(
+            owner: pid, live: !previousFrontmost.isTerminated,
+            nativeActive: previousFrontmost.isActive, workspace: workspace, appFrontmost: value)
+        }
+        return previousFrontmost.isActive && workspace == pid
       }
-      return true
+    } catch {
+      var row: [String: Any] = [
+        "phase": "focus-cleanup", "outcome": "failed", "pid": pid,
+        "error": String(describing: error),
+        "observed_frontmost_pid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0,
+        "baseline_active": previousFrontmost.isActive,
+        "baseline_bundle_id": previousFrontmost.bundleIdentifier ?? "unavailable",
+      ]
+      if let snapshot = try? FocusReadout.read(target: pid, profile: profile),
+        let data = try? JSONEncoder().encode(snapshot),
+        let observation = try? JSONSerialization.jsonObject(with: data)
+      {
+        row["focus_observation"] = observation
+      }
+      evidence.append(row)
+      throw error
     }
     if previousFrontmost.isTerminated {
       evidence.append([

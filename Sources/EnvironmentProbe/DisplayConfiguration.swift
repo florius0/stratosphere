@@ -103,9 +103,7 @@ struct DisplayConfigurationFailure: Error, CustomStringConvertible {
       else { throw ProbeFailure("Invalid display configuration helper arguments") }
       try DisplayReadout.validateContext(profile: profile)
       let sip = try SystemObservation.command("/usr/bin/csrutil", ["status"])
-      guard sip.0 == 0, sip.1.contains("System Integrity Protection status: enabled.") else {
-        throw ProbeFailure("Configuration requires SIP enabled")
-      }
+      _ = try SIPQualification.validate(profile: profile, exitCode: sip.0, output: sip.1)
       stage = "preflight"
       let request = try DisplayConfigurationRequest.decode(
         Data(arguments[4].utf8), live: DisplayReadout.rawIdentifiers(kind: .setup))

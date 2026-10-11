@@ -23,7 +23,7 @@ digraph Decisions {
   D20 [label="D-20 Overview/previews"];
   D21 [label="D-21 Native banners/materialized view"];
   D22 [label="D-22 TOML/Nix/UI overrides"];
-  D23 [label="D-23 Private APIs/SIP-enabled core"];
+  D23 [label="D-23 Private APIs/SIP-enabled core\nHosted SIP-off evidence supplemental"];
   D24 [label="D-24 Manager conflicts out of scope"];
   D25 [label="D-25 Compatibility via releases"];
   D26 [label="D-26 Per-app AX threads"];

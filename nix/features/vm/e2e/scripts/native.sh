@@ -17,4 +17,8 @@ if [[ $probe_code == 124 || $probe_code == 137 ]]; then
   timed_out=true
   fail 'Probe exceeded deadline'
 fi
+cat "$output/probe.log"
+if [[ -f "$output/qualification.json" ]]; then
+  jq -r 'if .sip_enabled_core_evidence == false then "SIP disabled: supplemental hosted regression evidence only; SIP-enabled VM qualification remains required." elif .sip_enabled_core_evidence == true then "SIP enabled: core environment evidence." else "SIP qualification unavailable; inspect qualification.json." end' "$output/qualification.json"
+fi
 result

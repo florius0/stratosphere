@@ -104,7 +104,7 @@ The native entrypoint also runs directly on GitHub-hosted macOS runners:
 nix run .#e2e-native -- --profile hosted
 ```
 
-It verifies the hosted context, and both entrypoints fail visibly for missing prerequisites. The [CI workflow](.github/workflows/ci.yml) runs deterministic checks and environment probes; it has not run until repository hosting is configured. Environment probes are partial infrastructure qualification, not daemon E2E.
+It verifies the hosted context, and both entrypoints fail visibly for missing prerequisites. The [CI workflow](.github/workflows/ci.yml) runs deterministic checks and environment probes; the first hosted probe run reported disabled SIP before AX/display testing. Environment probes are partial infrastructure qualification, not daemon E2E. Hosted probes may run with observed disabled SIP and report supplemental coverage; SIP-enabled compatibility requires the same scenarios in the local VM. Unknown SIP state and missing required capabilities still fail.
 
 Every invocation requires a new output directory. `run.json` records the current wrapper outcome; `qualification.json` exists only when the actual probe produced evidence. Reusing a directory is refused so an old passing result cannot stand in for a new run.
 

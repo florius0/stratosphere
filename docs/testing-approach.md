@@ -2,7 +2,7 @@
 
 Agreed on 2026-10-09: use one native E2E suite directly on GitHub-hosted macOS runners and inside disposable Tart VMs for local development and optional CI on the host. Nix manages the tool environment and execution wrappers; prepared macOS images supply the isolated desktop and its system state.
 
-This document governs the testing workflow. [Product requirements](functional-requirements.md), [non-functional requirements](non-functional-requirements.md), and [decisions](decision-map.md) remain authoritative for product behavior. The current implementation provides build targets, deterministic tests, native UI stories, and isolated native/VM probe entrypoints. A signed local probe passed in a disposable SIP-enabled macOS 26.5 Apple Silicon VM on 2026-10-10; hosted qualification has not run. The daemon, integrations, persistence engine, recovery watchdogs, and optional idle-time CI controller remain unimplemented. See the [development verification record](implementation/development-verification.md) for executed checks and qualification limits, and the [environment investigation](research/e2e-environment.md) for supporting research.
+This document governs the testing workflow. [Product requirements](functional-requirements.md), [non-functional requirements](non-functional-requirements.md), and [decisions](decision-map.md) remain authoritative for product behavior. The current implementation provides build targets, deterministic tests, native UI stories, and isolated native/VM probe entrypoints. A signed local probe passed in a disposable SIP-enabled macOS 26.5 Apple Silicon VM on 2026-10-10; the first hosted run failed its SIP precondition because the runner had SIP disabled. The [2026-10-12 revision](implementation/2026-10-12-hosted-probe-policy.md) permits explicitly limited hosted regression evidence while retaining SIP-enabled VM qualification. The daemon, integrations, persistence engine, recovery watchdogs, and optional idle-time CI controller remain unimplemented. See the [development verification record](implementation/development-verification.md) for executed checks and qualification limits, and the [environment investigation](research/e2e-environment.md) for supporting research.
 
 ## Terminology
 
@@ -29,7 +29,7 @@ Scenario logic, fixtures, assertions, and result format are common to all three.
 
 Desktop-mutating tests run only in the hosted runner or test VM. Deterministic tests and the [native story catalog](design-process.md) may run on the host without starting the manager against the host user's desktop.
 
-Use macOS 26+ on Apple Silicon. Record actual macOS/build, architecture, runner or test VM image identity, Xcode/SDK, signing identity, integration versions, and source revision. A major-version runner label is not an exact OS-version pin. Establish SIP-enabled core behavior explicitly; success on a differently configured runner is not that evidence.
+Use macOS 26+ on Apple Silicon. Record actual macOS/build, architecture, runner or test VM image identity, Xcode/SDK, signing identity, integration versions, and source revision. A major-version runner label is not an exact OS-version pin. Establish SIP-enabled core behavior in the test VM explicitly; hosted success with SIP disabled is supplemental regression evidence, not SIP-enabled compatibility evidence. Record `sip_enabled_core_evidence` alongside the raw SIP observation.
 
 ## Test layers and observability
 
@@ -117,7 +117,7 @@ Before treating the workflow as working infrastructure, demonstrate on a fresh h
 4. Signing/grant survival across changed builds and clones, plus clean/prepared installed-product startup and permission-loss cases.
 5. Unattended GUI readiness, activity detection unaffected by test VM input, return-to-work cancellation, and recovery/diagnostics after controller termination.
 
-If hosted qualification fails, required CI reports it. Correct or explicitly revise the environment approach; do not quietly move required PR checks to the host or disable SIP to claim core compatibility.
+Revision approved on 2026-10-12: hosted probes may continue with explicitly observed disabled SIP. They run supported AX/display scenarios and report limited evidence; the same scenarios must also run in the SIP-enabled local VM. Additional hosted-unavailable scenarios remain VM obligations. Unknown/custom SIP state, failed observations, missing required permissions/capabilities and assertions still fail visibly. The guest profile continues to require enabled SIP. No test changes SIP, silently skips declared coverage, or claims SIP-enabled compatibility from hosted results. Required hosted checks remain independent of optional local runner availability.
 
 Release evidence is broader than PR checks: exact supported macOS/integration versions, signed installed-product behavior, physical desktop conditions, and account-dependent restoration. Reliable ChatGPT conversation/draft/fresh-context restoration remains a release gate. Optional runner availability does not waive required evidence.
 

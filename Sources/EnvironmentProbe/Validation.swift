@@ -61,3 +61,14 @@ enum Isolation {
     }
   }
 }
+
+// Hosted regression evidence cannot establish the SIP-enabled core requirement.
+enum SIPQualification {
+  static func validate(profile: Profile, exitCode: Int32, output: String) throws -> Bool {
+    let state = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard exitCode == 0 else { throw ProbeFailure("SIP observation failed") }
+    if state == "System Integrity Protection status: enabled." { return true }
+    if profile == .hosted, state == "System Integrity Protection status: disabled." { return false }
+    throw ProbeFailure("SIP enabled state was not established")
+  }
+}

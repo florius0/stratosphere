@@ -60,9 +60,8 @@ import Darwin
       }
       let sip = try SystemObservation.command("/usr/bin/csrutil", ["status"])
       report["sip"] = sip.1
-      guard sip.0 == 0, sip.1.contains("System Integrity Protection status: enabled.") else {
-        throw ProbeFailure("SIP enabled state was not established")
-      }
+      report["sip_enabled_core_evidence"] = try SIPQualification.validate(
+        profile: options.profile, exitCode: sip.0, output: sip.1)
       report["gui_session"] = try SystemObservation.validateSession()
       report["capabilities"] = [
         "probe_ax_trusted": AXIsProcessTrusted(),
@@ -125,6 +124,7 @@ import Darwin
       }
     }
     if let error = report["error"] { fputs("\(error)\n", stderr) }
+    for error in cleanupErrors { fputs("Cleanup failed: \(error)\n", stderr) }
     exit(exitCode)
   }
   private static func recoverOutput(_ args: [String]) -> URL? {
