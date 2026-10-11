@@ -8,11 +8,11 @@ Use one native Swift test harness against real Stratosphere processes and real m
 
 GitHub remains the required CI provider. The host supplies optional extended runs; its availability never blocks ordinary pull-request checks. Desktop-mutating tests never run in the host user's login session. Ordinary deterministic tests and the native UI story catalog can run on the host without starting the manager against the host desktop.
 
-| Environment | Execution boundary | Reset | Intended work |
-| --- | --- | --- | --- |
-| GitHub-hosted CI | Existing runner OS and GUI session; no nested VM | Fresh runner for each job; scenario cleanup within the job | Required deterministic tests and core native E2E after environment qualification |
-| Local development | Disposable Tart test VM with an active GUI login | Clone a stopped prepared image; discard after the run | The same E2E suite, focused reruns, debugging, and interactive inspection |
-| Host as CI capacity | One ephemeral GitHub runner inside a disposable Tart test VM | One job per runner/test VM, then discard | Optional stress, integration, compatibility, and release-environment checks |
+| Environment         | Execution boundary                                           | Reset                                                      | Intended work                                                                    |
+| ------------------- | ------------------------------------------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| GitHub-hosted CI    | Existing runner OS and GUI session; no nested VM             | Fresh runner for each job; scenario cleanup within the job | Required deterministic tests and core native E2E after environment qualification |
+| Local development   | Disposable Tart test VM with an active GUI login             | Clone a stopped prepared image; discard after the run      | The same E2E suite, focused reruns, debugging, and interactive inspection        |
+| Host as CI capacity | One ephemeral GitHub runner inside a disposable Tart test VM | One job per runner/test VM, then discard                   | Optional stress, integration, compatibility, and release-environment checks      |
 
 This is test infrastructure. It does not select Stratosphere's native/virtual workspace backend, change application lifecycle rules, or introduce a runtime product compatibility policy.
 
@@ -50,15 +50,15 @@ Use persistent development-only signing identity and stable bundle IDs/installat
 
 The runner-facing entrypoint executes native scenarios in its current isolated test OS. A local wrapper creates the test VM, transfers inputs, starts that entrypoint in the test VM's GUI login session, retrieves results, and removes the test VM. Neither test logic nor expected outcomes depend on GitHub versus Tart. Exact build targets, source layout, executable names, transport details, and commands remain for implementation planning.
 
-| Component | Responsibility | Dependencies |
-| --- | --- | --- |
-| Environment launcher | Supply an isolated macOS desktop, identify the run, and retrieve results | GitHub runner or Tart; test VM GUI-session bootstrap |
-| Environment qualification | Prove session, permissions, display capabilities, and actual OS/signing conditions before a suite starts | Native OS calls and a controlled fixture application |
-| Display helper | Create, configure, remove, and observe test monitors | CoreGraphics private creation adapter and public display configuration/observation |
-| Fixture applications | Expose predictable real windows and deliberate failure conditions without personal data | AppKit, native tabs/full-screen where relevant, a fixture-only control channel |
-| Scenario driver | Execute public daemon/CLI actions and real UI input, then assert observable outcomes | Actual daemon API, OS observations, fixtures; XCUITest for rail/catalog interaction |
-| Result collector | Preserve logs, state, environment manifest, and available visual evidence | Test processes, fixture observations, existing screenshot permission |
-| Idle controller | Admit and interrupt optional jobs on the host | Host activity/power/resource observations and GitHub runner lifecycle |
+| Component                 | Responsibility                                                                                           | Dependencies                                                                        |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Environment launcher      | Supply an isolated macOS desktop, identify the run, and retrieve results                                 | GitHub runner or Tart; test VM GUI-session bootstrap                                |
+| Environment qualification | Prove session, permissions, display capabilities, and actual OS/signing conditions before a suite starts | Native OS calls and a controlled fixture application                                |
+| Display helper            | Create, configure, remove, and observe test monitors                                                     | CoreGraphics private creation adapter and public display configuration/observation  |
+| Fixture applications      | Expose predictable real windows and deliberate failure conditions without personal data                  | AppKit, native tabs/full-screen where relevant, a fixture-only control channel      |
+| Scenario driver           | Execute public daemon/CLI actions and real UI input, then assert observable outcomes                     | Actual daemon API, OS observations, fixtures; XCUITest for rail/catalog interaction |
+| Result collector          | Preserve logs, state, environment manifest, and available visual evidence                                | Test processes, fixture observations, existing screenshot permission                |
+| Idle controller           | Admit and interrupt optional jobs on the host                                                            | Host activity/power/resource observations and GitHub runner lifecycle               |
 
 Keep the real daemon, layout, persistence, backend adapter, integrations under test, rail, and watchdogs in the execution path. Synthetic applications supply real macOS windows; they do not replace AX or CoreGraphics with fakes. Do not add a test switch that bypasses permission checks or substitutes a fake OS backend and call the resulting run E2E.
 
@@ -120,26 +120,26 @@ Version prepared images by macOS/build, image identity/digest, signing identity,
 
 ## Coverage and release evidence
 
-| Suite | GitHub required checks | Local test VM / optional host CI | Additional evidence |
-| --- | --- | --- | --- |
-| Domain, layout, protocol, storage invariants | Yes; deterministic synthetic data | Same tests for reproduction | Does not establish OS feasibility |
-| Real windows, AX discovery/mutation, switching, native tabs/full-screen | Core after controlled-launch qualification | Same suite, broader cases | Record actual backend and OS conditions |
-| Multi-display placement and rails | Required cases after display qualification | Same display helper and topology cases | Physical reconnect identity/hardware behavior separately |
-| App AX stalls, daemon/rail crashes, independent recovery | Bounded fixture cases after qualification | Stress/repetition and installed-product cases | Verify desktop/Dock results, not just restarted PIDs |
-| Catalog/rail UI and input | Qualified XCUITest/native interaction cases | Interactive review and recordings | Wallpaper/materials/motion/gestures on supported hardware |
-| Safari/Chrome and other real-app restoration | Account-free qualified subset | Dedicated integration profiles | Exact app versions and fidelity evidence |
-| ChatGPT conversation/draft/fresh contexts | Only after actual integration and account qualification | Dedicated integration profile; release evidence required | Reliable restoration remains a release gate |
-| First-run grants, revocation, login, signed updates | Only if installed-product path qualifies | Prepared/clean test VMs; required release validation | Developer ID/notarization and SIP evidence |
+| Suite                                                                   | GitHub required checks                                  | Local test VM / optional host CI                         | Additional evidence                                       |
+| ----------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| Domain, layout, protocol, storage invariants                            | Yes; deterministic synthetic data                       | Same tests for reproduction                              | Does not establish OS feasibility                         |
+| Real windows, AX discovery/mutation, switching, native tabs/full-screen | Core after controlled-launch qualification              | Same suite, broader cases                                | Record actual backend and OS conditions                   |
+| Multi-display placement and rails                                       | Required cases after display qualification              | Same display helper and topology cases                   | Physical reconnect identity/hardware behavior separately  |
+| App AX stalls, daemon/rail crashes, independent recovery                | Bounded fixture cases after qualification               | Stress/repetition and installed-product cases            | Verify desktop/Dock results, not just restarted PIDs      |
+| Catalog/rail UI and input                                               | Qualified XCUITest/native interaction cases             | Interactive review and recordings                        | Wallpaper/materials/motion/gestures on supported hardware |
+| Safari/Chrome and other real-app restoration                            | Account-free qualified subset                           | Dedicated integration profiles                           | Exact app versions and fidelity evidence                  |
+| ChatGPT conversation/draft/fresh contexts                               | Only after actual integration and account qualification | Dedicated integration profile; release evidence required | Reliable restoration remains a release gate               |
+| First-run grants, revocation, login, signed updates                     | Only if installed-product path qualifies                | Prepared/clean test VMs; required release validation     | Developer ID/notarization and SIP evidence                |
 
 Hosted PR checks do not replace release gates. The host's optional capacity can produce release evidence, but absence or preemption of required release evidence blocks release. Virtual or deterministic tests do not waive hardware-dependent validation.
 
 ## Alternatives considered
 
-| Alternative | Assessment |
-| --- | --- |
+| Alternative                                                      | Assessment                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Second user with fast user switching or a remote virtual desktop | Lighter and worth retaining as a manual diagnostic option. Apple documents a remote virtual desktop without interrupting the console user, but it shares the OS and complicates reset, failure containment, and display/session assumptions. It offers less parity with disposable hosted CI. [Apple remote desktop](https://support.apple.com/guide/remote-desktop/choose-how-to-control-and-observe-apd4f46319e/mac) |
-| Tart VM for every environment | Good local isolation, but nested virtualization is unsupported on the target GitHub runners. Use the hosted runner as the existing isolation boundary. |
-| One harness with native-hosted and test VM launchers | Recommended. Scenario logic and real OS adapters stay common; environment provision/reset and permission preparation differ explicitly. |
+| Tart VM for every environment                                    | Good local isolation, but nested virtualization is unsupported on the target GitHub runners. Use the hosted runner as the existing isolation boundary.                                                                                                                                                                                                                                                                 |
+| One harness with native-hosted and test VM launchers             | Recommended. Scenario logic and real OS adapters stay common; environment provision/reset and permission preparation differ explicitly.                                                                                                                                                                                                                                                                                |
 
 ## Acceptance checks before adoption as working infrastructure
 

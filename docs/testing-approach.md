@@ -2,28 +2,28 @@
 
 Agreed on 2026-10-09: use one native E2E suite directly on GitHub-hosted macOS runners and inside disposable Tart VMs for local development and optional CI on the host. Nix manages the tool environment and execution wrappers; prepared macOS images supply the isolated desktop and its system state.
 
-This document governs the testing workflow. [Product requirements](functional-requirements.md), [non-functional requirements](non-functional-requirements.md), and [decisions](decision-map.md) remain authoritative for product behavior. This is planned infrastructure: build targets, source layout, entrypoints, and live environment qualification are not implemented. The [environment investigation](research/e2e-environment.md) records supporting evidence and its limits.
+This document governs the testing workflow. [Product requirements](functional-requirements.md), [non-functional requirements](non-functional-requirements.md), and [decisions](decision-map.md) remain authoritative for product behavior. The current implementation provides build targets, deterministic tests, native UI stories, and isolated native/VM probe entrypoints. A signed local probe passed in a disposable SIP-enabled macOS 26.5 Apple Silicon VM on 2026-10-10; hosted qualification has not run. The daemon, integrations, persistence engine, recovery watchdogs, and optional idle-time CI controller remain unimplemented. See the [development verification record](implementation/development-verification.md) for executed checks and qualification limits, and the [environment investigation](research/e2e-environment.md) for supporting research.
 
 ## Terminology
 
 Use these terms throughout the testing workflow:
 
-| Term | Meaning |
-| --- | --- |
-| Host | The physical Mac running Tart and the local development tools. |
-| Host user | The macOS account on the host that runs those tools; its desktop, home and keychain stay outside test VM execution. |
-| Test VM | The isolated macOS virtual machine used for desktop-mutating tests. |
-| Test VM user | The dedicated macOS account inside the test VM, with its own GUI login, files and permission grants. |
+| Term         | Meaning                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Host         | The physical Mac running Tart and the local development tools.                                                      |
+| Host user    | The macOS account on the host that runs those tools; its desktop, home and keychain stay outside test VM execution. |
+| Test VM      | The isolated macOS virtual machine used for desktop-mutating tests.                                                 |
+| Test VM user | The dedicated macOS account inside the test VM, with its own GUI login, files and permission grants.                |
 
 The host user builds and signs artifacts on the host. Tests run as the test VM user inside a disposable test VM.
 
 ## Execution environments
 
-| Environment | Execution | Reset and purpose |
-| --- | --- | --- |
-| GitHub-hosted CI | Native suite in an Apple Silicon `macos-26` runner's GUI session; no nested VM. | Fresh runner per job; required PR checks after qualification. |
-| Local development | Build on the host; run inside a disposable Tart test VM. | Clone a stopped prepared image, transfer artifacts, collect results, then discard. Support focused reruns and interactive inspection. |
-| Host as a runner | One-job GitHub self-hosted runner inside a disposable Tart test VM. | Optional extended tests admitted during idle time; the host user's desktop stays outside the execution boundary. |
+| Environment       | Execution                                                                       | Reset and purpose                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub-hosted CI  | Native suite in an Apple Silicon `macos-26` runner's GUI session; no nested VM. | Fresh runner per job; required PR checks after qualification.                                                                         |
+| Local development | Build on the host; run inside a disposable Tart test VM.                        | Clone a stopped prepared image, transfer artifacts, collect results, then discard. Support focused reruns and interactive inspection. |
+| Host as a runner  | One-job GitHub self-hosted runner inside a disposable Tart test VM.             | Optional extended tests admitted during idle time; the host user's desktop stays outside the execution boundary.                      |
 
 Scenario logic, fixtures, assertions, and result format are common to all three. Launch, permission preparation, and reset differ explicitly. GitHub remains the required CI provider; the host's availability does not block ordinary PR checks.
 
@@ -33,13 +33,13 @@ Use macOS 26+ on Apple Silicon. Record actual macOS/build, architecture, runner 
 
 ## Test layers and observability
 
-| Layer | What it proves |
-| --- | --- |
-| Deterministic tests | Tree/binding invariants, layouts, protocol, persistence, reconciliation, preflight, partial operations, history, and Undo with synthetic data. |
-| Native E2E | Actual daemon, rail, watchdogs, backend adapters, persistence, and integrations interacting with real macOS windows. |
-| UI stories and interaction checks | Component presentation, requested actions, focus/dismissal behavior, and replayable interrupted motion. |
-| Real-app and release validation | Declared restoration fidelity, installed-product behavior, signing/permissions, and exact compatibility evidence. |
-| Hardware validation | Physical display connections, gestures, sleep/wake, refresh rates, and appearance under supported desktop conditions. |
+| Layer                             | What it proves                                                                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deterministic tests               | Tree/binding invariants, layouts, protocol, persistence, reconciliation, preflight, partial operations, history, and Undo with synthetic data. |
+| Native E2E                        | Actual daemon, rail, watchdogs, backend adapters, persistence, and integrations interacting with real macOS windows.                           |
+| UI stories and interaction checks | Component presentation, requested actions, focus/dismissal behavior, and replayable interrupted motion.                                        |
+| Real-app and release validation   | Declared restoration fidelity, installed-product behavior, signing/permissions, and exact compatibility evidence.                              |
+| Hardware validation               | Physical display connections, gestures, sleep/wake, refresh rates, and appearance under supported desktop conditions.                          |
 
 Fixture applications create predictable real AppKit windows, native tabs/full-screen cases, and deliberate failure conditions. They may expose a fixture control channel; they do not replace AX or CoreGraphics with fakes. Keep production components and normal permission/preflight behavior in the E2E path.
 
@@ -51,13 +51,13 @@ Drive management scenarios through the public daemon API/CLI. Check independent 
 
 **Installed product** uses normal app startup, login registration, permissions, signing, and update/recovery behavior. Run it in prepared or clean test VMs, and on hosted CI only after qualifying that exact path. Controlled-launch results cannot replace installed-product release evidence.
 
-Prepare a test VM with active automatic GUI login, a stable development-only signing identity, stable bundle IDs/installation paths, and required grants made through System Settings. Verify grants survive changed builds and cloning. Keep a separate clean test VM without product grants for onboarding/permission scenarios. Distributed Developer ID builds retain their original signatures.
+Provision a test VM with active automatic GUI login, a stable development-only signing identity, stable bundle IDs/installation paths, and required grants made through System Settings. Verify grants survive changed builds and cloning. Recreate an optional separate clean test VM without product grants when onboarding/permission scenarios require it; ordinary development does not retain that extra disk. Distributed Developer ID builds retain their original signatures.
 
 SSH transfers and orchestration are allowed, but GUI work executes in the test VM's active login session. Changing Unix user or starting a system service is insufficient. If the host user's keychain or the test VM user's GUI session is unavailable, capacity stays unavailable; do not weaken the host's lock policy for CI.
 
 ## Multiple displays
 
-Create additional monitors inside the test macOS using a private `CGVirtualDisplay` helper. This is the intended common mechanism for hosted and test VM environments. Apple's VM graphics configuration exposes one display; do not assume additional VM attachments. Actual macOS 26/Apple Silicon support remains a qualification gate.
+Create additional monitors inside the test macOS using a private `CGVirtualDisplay` helper. The current implementation provides this common mechanism for hosted and test VM environments. Apple's VM graphics configuration exposes one display; do not assume additional VM attachments. The signed local probe verified extended virtual displays, differing densities, main-display changes, removal/reconnect, and baseline restoration on macOS 26.5 Apple Silicon with SIP enabled. Hosted support and other supported configurations remain qualification gates; see the [verification record](implementation/development-verification.md#qualified-local-probe-on-2026-10-10).
 
 Cover single-display and two-display extended desktops in the core suite, with three-display cases in extended runs. Include different dimensions/densities, monitors above/left of main, main-display changes, removal, and reconnect. Verify observed topology before assertions and disable automatic VM display refitting. Include the original runner/VM display in the topology; keep test monitors extended rather than mirrored.
 
@@ -67,22 +67,25 @@ Assertions run inside the test OS; a separate host window for every display is o
 
 ## Nix and image management
 
-Pin the Nix environment and prepared macOS image separately. Nix manages Tart, supporting tools, dependencies, generated test configuration, build outputs, and execution wrappers. Tart manages mutable test VM disks, boot, CPU/RAM/network configuration, and disposable clones. Store working VM disks and results outside the immutable Nix store.
+Pin the Nix environment and prepared macOS image separately. Nix declares digest-pinned sources, CPU/RAM/display settings, guest configuration and provisioning receipts alongside tools, build outputs and execution wrappers. Explicit `vm-provisioning` configures missing images and the prepared image's existing account, SSH public key, automatic login and idle settings. Runtime credential files remain outside the store. Key-based SSH and the active console user's GUI domain are verified before a successful guest receipt is recorded. Signing and permission grants remain separate; provisioning does not change Gatekeeper, SIP, TCC or MDM. Tart manages mutable disks, boot and disposable clones. Store working disks and results outside the immutable Nix store.
 
 Nixpkgs packages Tart while preserving its app bundle/provisioning profile. It also packages Apple SDKs, including SDK 26; compiler/SDK selection belongs in implementation planning. Full Xcode/UI-testing tools are separately provisioned and recorded. The Nix lockfile does not pin macOS, GUI login, permissions, signing keychains, or external Xcode. [Tart package](https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/ta/tart/package.nix), [Darwin tooling](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin)
 
 Prefer a small runtime test VM receiving self-contained app, harness, and fixture bundles built on the host. Installing Nix in the test VM is optional. If artifacts reference store dependencies, install Nix once in the prepared test VM and transfer complete closures with `nix copy`; an executable alone is insufficient. An Xcode-equipped profile serves suites needing development/UI-testing tools in the test VM. [Closure transfer](https://nix.dev/manual/nix/2.32/command-ref/new-cli/nix3-copy)
 
-| Proposed entrypoint | Responsibility |
-| --- | --- |
-| `nix develop` | Provide pinned development tools. |
-| `nix flake check` | Evaluate/build deterministic, cacheable checks. |
-| `nix run .#e2e-vm` | Provision a local test VM and run E2E inside it. |
-| `nix run .#e2e-native` | Run E2E in an already isolated, qualified test OS. |
+| Implemented entrypoint                                          | Responsibility                                                                                                                                 |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nix develop`                                                   | Provide pinned development tools and the selected writable Tart home.                                                                          |
+| `nix run .#vm-provisioning -- prepared`                         | Explicitly configure the declared image and guest; verify dedicated SSH and active GUI login, retain per-run evidence and stop the owned boot. |
+| `nix run .#vm-provisioning -- clean`                            | Recreate the optional image on demand for onboarding; configure image settings only.                                                           |
+| `nix run .#vm-provisioning -- --adopt prepared PROVENANCE.json` | Verify existing image provenance/settings and record its image receipt without guest changes.                                                  |
+| `nix flake check`                                               | Evaluate/build deterministic, cacheable checks.                                                                                                |
+| `nix run .#e2e-vm`                                              | Clone an explicitly prepared, stopped local Tart image, run the native qualification probe, collect results, and discard the owned clone.      |
+| `nix run .#e2e-native`                                          | Run the native qualification probe in an explicitly isolated hosted or test VM environment.                                                    |
 
-These entrypoints do not exist yet; final names and build layout are implementation decisions. Live GUI tests execute at runtime outside the Nix build sandbox, with fresh qualification, rather than treating a cached derivation as current desktop evidence.
+These entrypoints are provided by the project flake. See [development commands](../README.md#development) and [environment provisioning](implementation/environment-setup.md) for usage and prerequisites. The native and VM entrypoints currently run infrastructure probes, not daemon E2E; product scenarios will follow their implementations. Live GUI tests execute at runtime outside the Nix build sandbox, with fresh qualification, rather than treating a cached derivation as current desktop evidence.
 
-Version images by macOS/build, immutable image identity, preparation recipe, signing identity, and fixture/app versions. Cache a stopped prepared image for copy-on-write clones. Keep runner registrations and integration credentials out of reusable/shared images; use dedicated app test accounts and explicit integration profiles. Measure suite resource use before increasing test VM CPU/RAM or admitting capacity.
+Version images by macOS/build, immutable image identity, provisioning recipe, signing identity, and fixture/app versions. Cache a stopped prepared image for copy-on-write clones. Provisioning uses `.local/vm-provisioning` for credentials and evidence and `$TART_HOME/stratosphere-provisioning` for image/guest receipts. It never runs automatically through direnv, tests or E2E. Keep runner registrations and integration credentials out of reusable/shared images; use dedicated app test accounts and explicit integration profiles. Measure suite resource use before increasing test VM CPU/RAM or admitting capacity.
 
 ## Isolation, cleanup, and results
 
@@ -120,13 +123,13 @@ Release evidence is broader than PR checks: exact supported macOS/integration ve
 
 ## Product trace
 
-| Authority | Testing obligation |
-| --- | --- |
-| C-02/C-03; FR-03/FR-06/FR-13; FR-41/FR-45 | Real bindings, scope, fallback/reconnect, and shared rails. |
-| FR-22–FR-29; Q-02 | Actual integration fidelity and reliable ChatGPT contexts. |
-| FR-52–FR-57; NFR-02 | Public actions, preflight, ordering, partial operations, and explicit resume. |
-| FR-64–FR-68; NFR-03/NFR-04; Q-04 | Actual AX stalls, independent watchdogs, and desktop/Dock recovery. |
-| FR-69–FR-71; NFR-08 | Installed startup, stable identity, signed distribution, and updates. |
-| NFR-01/NFR-09/NFR-10; D-02/D-25 | Supported-platform/SIP evidence; real private-API validation; separate backend decision. |
+| Authority                                 | Testing obligation                                                                       |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| C-02/C-03; FR-03/FR-06/FR-13; FR-41/FR-45 | Real bindings, scope, fallback/reconnect, and shared rails.                              |
+| FR-22–FR-29; Q-02                         | Actual integration fidelity and reliable ChatGPT contexts.                               |
+| FR-52–FR-57; NFR-02                       | Public actions, preflight, ordering, partial operations, and explicit resume.            |
+| FR-64–FR-68; NFR-03/NFR-04; Q-04          | Actual AX stalls, independent watchdogs, and desktop/Dock recovery.                      |
+| FR-69–FR-71; NFR-08                       | Installed startup, stable identity, signed distribution, and updates.                    |
+| NFR-01/NFR-09/NFR-10; D-02/D-25           | Supported-platform/SIP evidence; real private-API validation; separate backend decision. |
 
 No product requirements or product DOT summaries change by adopting this workflow.

@@ -1,0 +1,30 @@
+digraph Features {
+  graph [rankdir=LR, label="Stratosphere features — arrows mean depends on", labelloc=t];
+  node [shape=box];
+  F01 [label="F-01 Workspace tree/navigation"];
+  F02 [label="F-02 Lifecycle/structural actions\nsealed archives; unarchive before interaction"];
+  F03 [label="F-03 Layout engines/mouse\nfree-centered; positional drag selects free"];
+  F04 [label="F-04 Built-in integrations"];
+  F05 [label="F-05 Files/capture/backups\nincludes retained history/Undo"];
+  F06 [label="F-06 History/Undo\nwindow-only keeps owner; subtree reclaims originals\npurge preserves retained references"];
+  F07 [label="F-07 Dock replacement rail"];
+  F08 [label="F-08 Attributed notifications"];
+  F09 [label="F-09 API/CLI/internal preflight\nside-effect steps wait; state commits continue"];
+  F10 [label="F-10 Config/Home Manager/actions"];
+  F11 [label="F-11 Overview/gestures"];
+  F12 [label="F-12 Ricing/green-button UI"];
+  F13 [label="F-13 Recovery/AX containment"];
+  F14 [label="F-14 Distribution/login/update"];
+  F15 [label="F-15 Backend/import"];
+  F02 -> {F01 F05 F09};
+  F03 -> F01;
+  F04 -> F05;
+  F06 -> {F04 F05 F09};
+  F07 -> {F01 F04 F08 F09};
+  F08 -> {F04 F05};
+  F10 -> F09;
+  F11 -> {F01 F06 F07};
+  F12 -> {F03 F07};
+  F15 -> {F01 F13};
+  F14 -> F13 [label="safe upgrade"];
+}

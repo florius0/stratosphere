@@ -1,5 +1,7 @@
 # Project Foundation Implementation Plan
 
+The tooling sections are historical and superseded by the approved [Nix tooling design](2026-10-11-nix-tooling-design.md); recorded product and verification obligations remain in force.
+
 > **For agentic workers:** Use subagent-driven-development for the domain, catalog, and environment-probe tasks, with task review and final review. The approved user instruction authorizes continuous execution.
 
 **Goal:** Provide a buildable native foundation and truthful isolated-test tooling.
@@ -40,9 +42,9 @@
 
 ## Task 3: Build, bundles, and Nix
 
-**Files:** `Tools/build.py`, `Tools/bundle.py`, `Tools/check-docs.py`, `Packaging/*.plist`, `flake.nix`, `flake.lock`, `nix/*.nix`, `README.md`, `.gitignore`.
+**Files:** `tools/build.py`, `tools/bundle.py`, `tools/check-docs.py`, `Packaging/*.plist`, `flake.nix`, `flake.lock`, `nix/*.nix`, `README.md`, `.gitignore`.
 
-**Interfaces:** `python3 Tools/build.py build|test|stories|qualify` is the common development wrapper. `build` writes `.local/build/*.app` and a probe executable. `qualify` delegates to the isolated entrypoint, and `stories` launches only the catalog.
+**Interfaces:** `python3 tools/build.py build|test|stories|qualify` is the common development wrapper. `build` writes `.local/build/*.app` and a probe executable. `qualify` delegates to the isolated entrypoint, and `stories` launches only the catalog.
 
 - [x] Prove Swift 6 and SDK 26 compilation; record selected compiler and SDK. Investigate a pinned Nix source build and retain explicit unqualified status if unavailable.
 - [x] Assemble bundles containing Info.plist, executable, resources and optional signing; inspect metadata and Mach-O dependencies.
@@ -51,9 +53,9 @@
 
 ## Task 4: Isolated environment probes and orchestration
 
-**Files:** `Sources/FixtureApp/*.swift`, `Sources/EnvironmentProbe/*.swift`, `E2E/*.py`, `Tests/ToolTests/*.py`, `.github/workflows/*.yml`, `docs/implementation/environment-setup.md`.
+**Files:** `Sources/FixtureApp/*.swift`, `Sources/EnvironmentProbe/*.swift`, `e2e/*.py`, `Tests/ToolTests/*.py`, `.github/workflows/*.yml`, `docs/implementation/environment-setup.md`.
 
-**Interfaces:** `EnvironmentProbe --profile hosted|guest --fixture PATH --output PATH` produces structured environment/results JSON and a nonzero exit for missing requirements. `E2E/native.py` enforces the isolated profile and invokes the probe. `E2E/vm.py` accepts a configured prepared image and test VM user account; clones, transfers, collects, and cleans up.
+**Interfaces:** `EnvironmentProbe --profile hosted|guest --fixture PATH --output PATH` produces structured environment/results JSON and a nonzero exit for missing requirements. `e2e/native.py` enforces the isolated profile and invokes the probe. `e2e/vm.py` accepts a configured prepared image and test VM user account; clones, transfers, collects, and cleans up.
 
 - [x] Write wrapper tests proving absent isolation is refused and owned test VM teardown occurs on failure.
 - [x] Add real AppKit fixture and AX/display probe; compile without mutating the host desktop.
@@ -62,7 +64,7 @@
 
 ## Task 5: Review and evidence
 
-**Files:** `docs/implementation/foundation-verification.md`, `README.md`, this plan.
+**Files:** `docs/implementation/development-verification.md`, `README.md`, this plan.
 
 - [x] Run Swift tests, tooling tests, builds, Nix checks applicable to selected tooling, documentation link/ID checks, and Graphviz parsing.
 - [x] Inspect artifacts and native stories; review the final changes for invariants, truthful qualification, cleanup, and preservation of product authority.
@@ -70,8 +72,8 @@
 
 ## Execution result
 
-Implemented and reviewed the native code/build foundation. Initial pinned Nix and Xcode checks passed 45 Swift Testing tests and 20 Python tooling tests. Follow-up runtime-only, signing and native boundary fixes now pass 79 Swift tests and 36 Python tests on both toolchains. Native catalog and packaged artifacts were inspected; exact evidence and remaining limits are in [foundation verification](foundation-verification.md).
+Implemented and reviewed the native code/build foundation. Initial pinned Nix and Xcode checks passed 45 Swift Testing tests and 20 Python tooling tests. Follow-up runtime-only, signing and native boundary fixes now pass 79 Swift tests and 36 Python tests on both toolchains. Native catalog and packaged artifacts were inspected; exact evidence and remaining limits are in [development verification](development-verification.md).
 
 The initial prerequisite inspection found no prepared Tart image, dedicated test VM key, configured Git remote or persistent signing identity. After the host user freed storage and approved a dedicated test identity, a SIP-enabled macOS 26.5 test VM was prepared, signed artifacts installed at stable paths, and Accessibility granted. Interactive Retina scaling is saved and visually confirmed. Actual disposable runs demonstrated rebuilt-probe grant survival, partial native window/display/focus checks, and complete baseline restoration/owned-clone teardown in the documented runs.
 
-The complete normal signed local probe passed on 2026-10-10 at `20398a2`, including both windows, main-display change, removal/reconnect identity, full baseline/focus restoration and owned clone teardown. Evidence and the explicit activation-readiness revision are recorded in foundation verification. The prepared test VM is open for interactive use with the qualified tools; stop it before automated cloning. Hosted qualification awaits the user's manual push. Checkmarks above record implemented tooling and executed checks; they do not establish unexecuted product or release gates.
+The complete normal signed local probe passed on 2026-10-10 at `20398a2`, including both windows, main-display change, removal/reconnect identity, full baseline/focus restoration and owned clone teardown. Evidence and the explicit activation-readiness revision are recorded in development verification. The prepared test VM is open for interactive use with the qualified tools; stop it before automated cloning. Hosted qualification awaits the user's manual push. Checkmarks above record implemented tooling and executed checks; they do not establish unexecuted product or release gates.

@@ -1,5 +1,7 @@
 # Project foundation design
 
+The tooling sections are historical and superseded by the approved [Nix tooling design](2026-10-11-nix-tooling-design.md); recorded product and verification obligations remain in force.
+
 Approved through the setup proposal and the user's “Do that” instruction on 2026-10-09. This is implementation design, not a revision of product scope.
 
 ## Scope
