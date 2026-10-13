@@ -30,6 +30,7 @@ digraph Decisions {
   D27 [label="D-27 Watchdogs/explicit shutdown"];
   D28 [label="D-28 App quit opt-in"];
   D29 [label="D-29 Platform/signing/distribution"];
+  D30 [label="D-30 Resource-first command catalog\nselectors/defaults/results/recovery"];
   Q01 [label="Q-01 Backend/Spaces/full-screen feasibility", style=dashed];
   Q02 [label="Q-02 ChatGPT/VS Code mechanisms", style=dashed];
   Q03 [label="Q-03 Notification replay/clicks", style=dashed];
@@ -52,6 +53,7 @@ digraph Decisions {
   D13 -> D14;
   D15 -> {D16 D17};
   D17 -> D18;
+  D30 -> {D03 D10 D11 D17 D18 D22};
   D19 -> {D20 D21 D22 D27};
   D23 -> {D25 D26};
   D26 -> D27;

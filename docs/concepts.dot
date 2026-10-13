@@ -27,7 +27,7 @@ digraph Concepts {
   C07 -> C04 [label="captures/restores context"];
   C07 -> C08 [label="versioned payloads"];
   C08 -> C04 [label="window-only restore keeps leaf owner"];
-  C09 -> C01 [label="mutates with preflight"];
+  C09 -> C01 [label="resource-first commands; preflight"];
   C09 -> C08 [label="retains before-state"];
   C09 -> C07 [label="routine actions accept documented limits"];
   C11 -> C09 [label="public RPC actions"];

@@ -9,7 +9,7 @@ digraph Features {
   F06 [label="F-06 History/Undo\nwindow-only keeps owner; subtree reclaims originals\npurge preserves retained references"];
   F07 [label="F-07 Dock replacement rail"];
   F08 [label="F-08 Attributed notifications"];
-  F09 [label="F-09 API/CLI/internal preflight\nside-effect steps wait; state commits continue"];
+  F09 [label="F-09 API/CLI/internal preflight\naccepted resource-first command catalog\nside-effect steps wait; state commits continue"];
   F10 [label="F-10 Config/Home Manager/actions"];
   F11 [label="F-11 Overview/gestures"];
   F12 [label="F-12 Ricing/green-button UI"];

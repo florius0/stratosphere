@@ -48,6 +48,10 @@ Automatic unloading, multiple tiled groups per leaf, third-party integration pro
 
 No implementation roadmap is defined here. Numerical defaults and unresolved details must be checked against the decision map rather than inferred from examples.
 
+## Command design
+
+The [accepted command catalog](command-catalog.md) defines the resource-first CLI/action surface, selectors, arguments, defaults, results, and recovery paths (D-30, FR-79). It refines the product interface while preserving accepted invariants and unresolved mechanism/feasibility questions.
+
 ## Development workflow research
 
 [E2E execution environment investigation](research/e2e-environment.md) records the evidence and feasibility limits behind the [agreed testing approach](testing-approach.md). The workflow is selected; macOS-specific mechanisms still require the documented acceptance checks before implementation relies on them.
